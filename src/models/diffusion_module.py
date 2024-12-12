@@ -1,6 +1,7 @@
 from typing import Any, Dict, Tuple
-from diffusers import UNet2DModel, DDPMScheduler, AutoencoderKL
+from diffusers import UNet2DConditionModel, DDPMScheduler, AutoencoderKL
 import torch
+import torch.nn.functional as F
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from transformers import CLIPFeatureExtractor, CLIPTextModel
@@ -41,7 +42,7 @@ class DiffusionLitModule(LightningModule):
 
     def __init__(
         self,
-        unet: UNet2DModel | str,
+        unet: UNet2DConditionModel | str,
         diffusion_schedule: DDPMScheduler,
         optimizer: torch.optim.Optimizer,
         scheduler: torch.optim.lr_scheduler,
@@ -70,7 +71,7 @@ class DiffusionLitModule(LightningModule):
         self.feature_extractor = feature_extractor
 
         if isinstance(unet, str):
-            self.unet = UNet2DModel.from_pretrained(unet, subfolder="unet")
+            self.unet = UNet2DConditionModel.from_pretrained(unet, subfolder="unet")
         
         if isinstance(vae, str):
             self.vae = AutoencoderKL.from_pretrained(vae, subfolder="vae")
@@ -112,25 +113,23 @@ class DiffusionLitModule(LightningModule):
 
     def model_step(self, batch):
         with torch.no_grad():
-            latents = self.vae.encoder(batch["pixel_values"]).latent_dist.sample()
+            latents = self.vae.encode(batch["pixel_values"],return_dict=True).latent_dist.sample()
             latents = latents * 0.18215
 
         noise = torch.randn_like(latents)
         bs = latents.shape[0]
         timesteps = torch.randint(
-            0, self.scheduler.config.num_train_timesteps, (bs,), device=latents.device
+            0, self.diffusion_schedule.config.num_train_timesteps, (bs,), device=latents.device
         ).long()
 
-        noised_latents = self.scheduler.add_noise(latents, noise, timesteps)
-
+        noised_latents = self.diffusion_schedule.add_noise(latents, noise, timesteps)
         with torch.no_grad():
             encoder_hidden_states = self.text_encoder(batch["input_ids"])[0]
 
         noise_pred = self.unet.forward(
             noised_latents, timesteps, encoder_hidden_states
         ).sample
-
-        loss = self.criterion(noise_pred, noise)
+        loss = F.mse_loss(noise_pred, noise, reduction="none").mean([1, 2, 3]).mean()
         return loss
 
     def training_step(

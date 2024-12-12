@@ -1,0 +1,28 @@
+_target_: src.models.diffusion_module.DiffusionLitModule
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 2e-6
+
+# scheduler:
+#   _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+#   _partial_: true
+#   mode: min
+#   factor: 0.1
+#   patience: 10
+
+scheduler: null
+
+unet: CompVis/stable-diffusion-v1-4
+vae: CompVis/stable-diffusion-v1-4
+text_encoder: CompVis/stable-diffusion-v1-4
+feature_extractor: openai/clip-vit-base-patch32
+diffusion_schedule:
+  _target_: diffusers.DDPMScheduler
+  beta_start: 0.00085
+  beta_end: 0.012
+  beta_schedule: scaled_linear
+  num_train_timesteps: 1000
+# compile model for faster training with pytorch 2.0
+compile: false

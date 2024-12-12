@@ -1,0 +1,28 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: dreambooth
+  - override /model: stable_diffusion
+  - override /callbacks: default
+  - override /trainer: gpu
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["stable_diffusion", "dream_booth"]
+
+seed: 42
+
+trainer:
+  min_epochs: 10
+  max_epochs: 400
+
+logger:
+  wandb:
+    tags: ${tags}
+    group: "stable_diffusion"
+  aim:
+    experiment: "stable_diffusion_dream_booth"

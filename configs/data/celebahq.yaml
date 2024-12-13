@@ -1,5 +1,6 @@
 _target_: src.data.celebahq_datamodule.CelebahqDataModule
 dataset_path: data/mmcelebahq
-batch_size: 1
-num_workers: 1
+size: 512
+batch_size: 4
+num_workers: 4
 pin_memory: true

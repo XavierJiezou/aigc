@@ -57,6 +57,7 @@ class ControlLitModule(LightningModule):
         controlnet: ControlNetModel | str=None,
         lr_num_cycles=1,
         lr_power=1.0,
+        froze_components = ["vae","text_encoder"],
         compile: bool = False,
     ) -> None:
         super().__init__()
@@ -105,17 +106,11 @@ class ControlLitModule(LightningModule):
         self.froze()
 
     def froze(self):
-        self.vae.eval()
-        self.text_encoder.eval()
-        self.unet.eval()
-        for param in self.vae.parameters():
-            param.requires_grad = False
-        
-        for param in self.text_encoder.parameters():
-            param.requires_grad = False
-
-        for param in self.unet.parameters():
-            param.requires_grad = False
+        for component in self.hparams.froze_components:
+            component = getattr(self, component)
+            component.eval()
+            for param in component.parameters():
+                param.requires_grad = False
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Perform a forward pass through the model `self.net`.

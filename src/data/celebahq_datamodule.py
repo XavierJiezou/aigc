@@ -13,6 +13,7 @@ class CelebahqDataModule(LightningDataModule):
     def __init__(
         self,
         dataset_path="data/mmcelebahq",
+        size=512,
         batch_size: int = 1,
         num_workers: int = 0,
         pin_memory: bool = True,
@@ -40,6 +41,7 @@ class CelebahqDataModule(LightningDataModule):
         """
         CelebahqDataset(
             dataset_path=self.hparams.dataset_path,
+            size=self.hparams.size,
             stage="train",
         )
     
@@ -58,11 +60,13 @@ class CelebahqDataModule(LightningDataModule):
         if not self.train_dataset and not self.val_dataset and not self.test_dataset:
             self.train_dataset = CelebahqDataset(
                 dataset_path=self.hparams.dataset_path,
+                size=self.hparams.size,
                 stage="train"
             )
 
             self.val_dataset = self.test_dataset = CelebahqDataset(
                 dataset_path=self.hparams.dataset_path,
+                size=self.hparams.size,
                 stage="val"
             )
 

@@ -13,6 +13,7 @@ class CelebahqDataset(Dataset):
         self,
         dataset_path="data/mmcelebahq",
         stage: Literal["train", "val"] = "train",
+        size=512,
     ):
         self.dataset_path = dataset_path
         self.dataset = self.get_dataset(dataset_path, stage)
@@ -20,8 +21,18 @@ class CelebahqDataset(Dataset):
             "CompVis/stable-diffusion-v1-4",
             subfolder="tokenizer",
         )
+        self.mask_transforms = transforms.Compose(
+            [
+                transforms.Resize(size),
+                transforms.CenterCrop(size),
+                transforms.PILToTensor(),
+                transforms.Lambda(lambda x: x.float())  # 转换为 float 类型
+            ]
+        )
         self.transforms = transforms.Compose(
             [
+                transforms.Resize(size),
+                transforms.CenterCrop(size),
                 transforms.ToTensor(),
                 transforms.Normalize([0.5], [0.5]),
             ]
@@ -38,12 +49,12 @@ class CelebahqDataset(Dataset):
 
     def get_image(self, filename):
         filename = os.path.join(self.dataset_path, "image", f"{filename}.jpg")
-        image = np.array(Image.open(filename))
+        image = Image.open(filename)
         return image
 
     def get_mask(self, filename):
         filename = os.path.join(self.dataset_path, "mask", f"{filename}.png")
-        mask = np.array(Image.open(filename)).astype(np.float32)
+        mask = Image.open(filename).convert("L")
         return mask
 
     def get_caption(self, filename):
@@ -60,6 +71,8 @@ class CelebahqDataset(Dataset):
         image = self.get_image(index)
         mask = self.get_mask(index)
         prompt = self.get_caption(index)
+
+        mask = self.mask_transforms(mask)
         example["instance_images"] = self.transforms(image)
         example["instance_masks"] = mask
         example["instance_prompt_ids"] = self.tokenizer(
@@ -80,23 +93,26 @@ if __name__ == "__main__":
     )
     dataset = CelebahqDataset()
     from matplotlib import pyplot as plt
+
     plt.figure(figsize=(12, 8))
     for data in dataset:
 
-        instance_prompt_ids = data['instance_prompt_ids']
-        original_text = tokenizer.decode(instance_prompt_ids[0], skip_special_tokens=True)
+        instance_prompt_ids = data["instance_prompt_ids"]
+        original_text = tokenizer.decode(
+            instance_prompt_ids[0], skip_special_tokens=True
+        )
         print(original_text)
         image = data["instance_images"]
         image = image * 0.5 + 0.5
         image = image * 255
-        image = image.permute(1,2,0).numpy().astype(np.uint8)
+        image = image.permute(1, 2, 0).numpy().astype(np.uint8)
         mask = data["instance_masks"]
 
-        plt.subplot(1,2,1)
+        plt.subplot(1, 2, 1)
         plt.imshow(image)
         plt.title(original_text)
         plt.axis("off")
-        plt.subplot(1,2,2)
+        plt.subplot(1, 2, 2)
         plt.imshow(mask)
         plt.axis("off")
 

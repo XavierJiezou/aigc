@@ -17,6 +17,7 @@ lr_scheduler: constant
 unet: stable-diffusion-v1-5/stable-diffusion-v1-5
 vae: stable-diffusion-v1-5/stable-diffusion-v1-5
 text_encoder: stable-diffusion-v1-5/stable-diffusion-v1-5
+froze_components: ["vae","text_encoder","unet"]
 controlnet: null
 diffusion_schedule: stable-diffusion-v1-5/stable-diffusion-v1-5
 # compile model for faster training with pytorch 2.0

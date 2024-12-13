@@ -42,5 +42,15 @@ class DreamBoothDataset(Dataset):
 
 
 if __name__ == "__main__":
-    dataset = DreamBoothDataset()
+    
+    tokenizer = CLIPTokenizer.from_pretrained(
+        "CompVis/stable-diffusion-v1-4",
+        subfolder="tokenizer",
+    )
+    dataset = DreamBoothDataset(tokenizer=tokenizer)
     print(dataset[0])
+    print(f"Decoded tokens: {tokenizer.decode(dataset[0]['instance_prompt_ids'])}")
+
+    print(f"Start of text token id: {tokenizer.cls_token_id}")
+    print(f"End of text token id: {tokenizer.sep_token_id}")
+

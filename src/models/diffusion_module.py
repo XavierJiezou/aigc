@@ -124,8 +124,7 @@ class DiffusionLitModule(LightningModule):
 
         noised_latents = self.diffusion_schedule.add_noise(latents, noise, timesteps)
         with torch.no_grad():
-            encoder_hidden_states = self.text_encoder(batch["input_ids"])[0]
-
+            encoder_hidden_states = self.text_encoder(batch["input_ids"])[0] # encoder_hidden_states shape : bs 8 768
         noise_pred = self.unet.forward(
             noised_latents, timesteps, encoder_hidden_states
         ).sample

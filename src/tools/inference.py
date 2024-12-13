@@ -62,7 +62,8 @@ def main():
     print("init pipeline...")
     pipeline:StableDiffusionPipeline = get_pipeline(args)
     print("start inference...")
-    image = pipeline.__call__(args.prompt,height=args.height,width=args.width,num_inference_steps=args.num_inference_steps).images[0]
+    generator=torch.Generator().manual_seed(args.seed)
+    image = pipeline.__call__(args.prompt,height=args.height,width=args.width,num_inference_steps=args.num_inference_steps,generator=generator).images[0]
     os.makedirs(os.path.dirname(args.output_path),exist_ok=True)
     image.save(args.output_path)
     print(f"done.image saved to {args.output_path}")

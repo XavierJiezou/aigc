@@ -8,7 +8,7 @@ from transformers import CLIPTokenizer
 from torch.utils.data import DataLoader
 
 
-class CelebahqDataModule(LightningDataModule):
+class MMCelebAHQDataModule(LightningDataModule):
 
     def __init__(
         self,

@@ -202,14 +202,41 @@ if __name__ == "__main__":
         mask = batch["instance_masks"]
 
         mask = mask.squeeze().detach().numpy().astype(np.uint8)
-        mask = Image.fromarray(mask).convert("L")
+
+        palette = np.array(
+        [
+            (0, 0, 0),
+            (204, 0, 0),
+            (76, 153, 0),
+            (204, 204, 0),
+            (51, 51, 255),
+            (204, 0, 204),
+            (0, 255, 255),
+            (51, 255, 255),
+            (102, 51, 0),
+            (255, 0, 0),
+            (102, 204, 0),
+            (255, 255, 0),
+            (0, 0, 153),
+            (0, 0, 204),
+            (255, 51, 153),
+            (0, 204, 204),
+            (0, 51, 0),
+            (255, 153, 51),
+            (0, 204, 0),
+        ],
+        dtype=np.uint8,
+    )
+
+        color_mask = palette[mask]
+        color_mask = Image.fromarray(color_mask)
 
         plt.subplot(1, 2, 1)
         plt.imshow(image)
         plt.title(original_text,fontsize=8)
         plt.axis("off")
         plt.subplot(1, 2, 2)
-        plt.imshow(mask)
+        plt.imshow(color_mask)
         plt.axis("off")
 
         plt.tight_layout()

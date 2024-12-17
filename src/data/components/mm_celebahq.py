@@ -62,7 +62,8 @@ class MMCelebahq(Dataset):
                 face_files = [
                     filename
                     for filename in face_files
-                    if filename.endswith(".jpg") and int(os.path.basename(filename).split(".")[0]) in filenames
+                    if filename.endswith(".jpg")
+                    and int(os.path.basename(filename).split(".")[0]) in filenames
                 ]
                 face_files = {filename: Image.open(filename) for filename in face_files}
                 self.face_cache = face_files
@@ -74,7 +75,8 @@ class MMCelebahq(Dataset):
                 mask_files = [
                     filename
                     for filename in mask_files
-                    if filename.endswith(".png") and int(os.path.basename(filename).split(".")[0]) in filenames
+                    if filename.endswith(".png")
+                    and int(os.path.basename(filename).split(".")[0]) in filenames
                 ]
                 mask_files = {
                     filename: Image.fromarray(np.array(Image.open(filename)), mode="L")
@@ -86,7 +88,9 @@ class MMCelebahq(Dataset):
         if text_cache is not None:
             with open(text_cache, mode="r") as f:
                 text_json: dict = json.load(f)
-            tmp = {k: v for k, v in text_json.items() if int(k.split(".")[0]) in filenames}
+            tmp = {
+                k: v for k, v in text_json.items() if int(k.split(".")[0]) in filenames
+            }
             self.text_cache = tmp
             print("load text cache done.")
 
@@ -121,20 +125,20 @@ class MMCelebahq(Dataset):
         prompt = None
 
         if self.face_cache is not None:
-            face_name = os.path.join(self.dataset_path,"face",f"{index}.jpg")
+            face_name = os.path.join(self.dataset_path, "face", f"{index}.jpg")
             image = self.face_cache[face_name]
         else:
             image = self.get_image(index)
 
         if self.mask_cache is not None:
-            mask_name = os.path.join(self.dataset_path,"mask",f"{index}.png")
+            mask_name = os.path.join(self.dataset_path, "mask", f"{index}.png")
             mask = self.mask_cache[mask_name]
         else:
             mask = self.get_mask(index)
-        
+
         if self.text_cache is not None:
             text_name = f"{index}.jpg"
-            prompts:list = self.text_cache[text_name]
+            prompts: list = self.text_cache[text_name]
             prompt = random.choices(prompts)[0]
         else:
             prompt = self.get_caption(index)
@@ -159,34 +163,61 @@ if __name__ == "__main__":
     )
     dataset = MMCelebahq(split="val")
     data = dataset[0]
-    print(data['instance_images'].shape,data['instance_masks'].shape,data['instance_prompt_ids'])
-    image:torch.Tensor = data['instance_images']
-    mask:torch.Tensor = data['instance_masks']
-    prompt = data['instance_prompt_ids']
+    print(
+        data["instance_images"].shape,
+        data["instance_masks"].shape,
+        data["instance_prompt_ids"],
+    )
+    image: torch.Tensor = data["instance_images"]
+    mask: torch.Tensor = data["instance_masks"]
+    prompt = data["instance_prompt_ids"]
     text = tokenizer.decode(prompt)
-    
+
     mask = mask.squeeze().detach().numpy().astype(np.uint8)
-    mask = Image.fromarray(mask).convert("L")
+
+    palette = np.array(
+        [
+            (0, 0, 0),
+            (204, 0, 0),
+            (76, 153, 0),
+            (204, 204, 0),
+            (51, 51, 255),
+            (204, 0, 204),
+            (0, 255, 255),
+            (51, 255, 255),
+            (102, 51, 0),
+            (255, 0, 0),
+            (102, 204, 0),
+            (255, 255, 0),
+            (0, 0, 153),
+            (0, 0, 204),
+            (255, 51, 153),
+            (0, 204, 204),
+            (0, 51, 0),
+            (255, 153, 51),
+            (0, 204, 0),
+        ],
+        dtype=np.uint8,
+    )
+    color_mask = palette[mask]
+    color_mask = Image.fromarray(color_mask)
 
     image = (image * 0.5) + 0.5
-    image = image.permute(1,2,0).detach().numpy()
-    image = image * 255.
+    image = image.permute(1, 2, 0).detach().numpy()
+    image = image * 255.0
     image = image.astype(np.uint8)
 
     from matplotlib import pyplot as plt
 
-    plt.figure(figsize=(12,8))
-    plt.subplot(1,2,1)
+    plt.figure(figsize=(12, 8))
+    plt.subplot(1, 2, 1)
     plt.imshow(image)
-    plt.title(text,fontsize=8)
+    plt.title(text, fontsize=8)
     plt.axis("off")
 
-    plt.subplot(1,2,2)
-    plt.imshow(mask)
+    plt.subplot(1, 2, 2)
+    plt.imshow(color_mask)
     plt.axis("off")
 
     plt.tight_layout()
     plt.savefig("0.png")
-
-
-

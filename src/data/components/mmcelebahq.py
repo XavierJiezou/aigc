@@ -11,23 +11,23 @@ from torchvision import transforms
 import torch
 
 
-class MMCelebahq(Dataset):
+class MMCelebAHQ(Dataset):
     def __init__(
         self,
         dataset_path="data/mmcelebahq",
         split: Literal["train", "val"] = "train",
-        face_cache="data/mmcelebahq/face.zip",
-        mask_cache="data/mmcelebahq/mask.zip",
-        text_cache="data/mmcelebahq/text.json",
+        face_file="data/mmcelebahq/face.zip",
+        mask_file="data/mmcelebahq/mask.zip",
+        text_file="data/mmcelebahq/text.json",
         size=512,
     ):
         self.dataset_path = dataset_path
         self.split = split
-        self.face_cache = None
-        self.mask_cache = None
-        self.text_cache = None
+        self.face_file = None
+        self.mask_file = None
+        self.text_file = None
 
-        self.filenames = self.get_filenames(split, face_cache, mask_cache, text_cache)
+        self.filenames = self.get_filenames(split, face_file, mask_file, text_file)
         self.tokenizer = CLIPTokenizer.from_pretrained(
             "checkpoints",
             subfolder="tokenizer",
@@ -49,15 +49,15 @@ class MMCelebahq(Dataset):
             ]
         )
 
-    def get_filenames(self, split, face_cache=None, mask_cache=None, text_cache=None):
+    def get_filenames(self, split, face_file=None, mask_file=None, text_file=None):
         filenames = None
         if split == "train":
             filenames = [i for i in range(0, 27000)]
         else:
             filenames = [i for i in range(27000, 30000)]
 
-        if face_cache is not None:
-            with zipfile.ZipFile(face_cache, "r") as zip_ref:
+        if face_file is not None:
+            with zipfile.ZipFile(face_file, "r") as zip_ref:
                 face_files = zip_ref.namelist()
                 face_files = [
                     filename
@@ -66,11 +66,11 @@ class MMCelebahq(Dataset):
                     and int(os.path.basename(filename).split(".")[0]) in filenames
                 ]
                 face_files = {filename: Image.open(filename) for filename in face_files}
-                self.face_cache = face_files
-            print("load face cache done.")
+                self.face_file = face_files
+            # print("load face file done.")
 
-        if mask_cache is not None:
-            with zipfile.ZipFile(mask_cache, "r") as zip_ref:
+        if mask_file is not None:
+            with zipfile.ZipFile(mask_file, "r") as zip_ref:
                 mask_files = zip_ref.namelist()
                 mask_files = [
                     filename
@@ -82,17 +82,17 @@ class MMCelebahq(Dataset):
                     filename: Image.fromarray(np.array(Image.open(filename)), mode="L")
                     for filename in mask_files
                 }
-                self.mask_cache = mask_files
-            print("load mask cache done.")
+                self.mask_file = mask_files
+            # print("load mask file done.")
 
-        if text_cache is not None:
-            with open(text_cache, mode="r") as f:
+        if text_file is not None:
+            with open(text_file, mode="r") as f:
                 text_json: dict = json.load(f)
             tmp = {
                 k: v for k, v in text_json.items() if int(k.split(".")[0]) in filenames
             }
-            self.text_cache = tmp
-            print("load text cache done.")
+            self.text_file = tmp
+            # print("load text file done.")
 
         return filenames
 
@@ -109,7 +109,7 @@ class MMCelebahq(Dataset):
         mask = Image.fromarray(np.array(Image.open(filename)), mode="L")
         return mask
 
-    def get_caption(self, filename):
+    def get_text(self, filename):
         filename = os.path.join(self.dataset_path, "caption", f"{filename}.txt")
         with open(filename, "r") as f:
             prompts = f.readlines()
@@ -124,24 +124,24 @@ class MMCelebahq(Dataset):
         mask = None
         prompt = None
 
-        if self.face_cache is not None:
+        if self.face_file is not None:
             face_name = os.path.join(self.dataset_path, "face", f"{index}.jpg")
-            image = self.face_cache[face_name]
+            image = self.face_file[face_name]
         else:
             image = self.get_image(index)
 
-        if self.mask_cache is not None:
+        if self.mask_file is not None:
             mask_name = os.path.join(self.dataset_path, "mask", f"{index}.png")
-            mask = self.mask_cache[mask_name]
+            mask = self.mask_file[mask_name]
         else:
             mask = self.get_mask(index)
 
-        if self.text_cache is not None:
+        if self.text_file is not None:
             text_name = f"{index}.jpg"
-            prompts: list = self.text_cache[text_name]
+            prompts: list = self.text_file[text_name]
             prompt = random.choices(prompts)[0]
         else:
-            prompt = self.get_caption(index)
+            prompt = self.get_text(index)
 
         mask = self.mask_transforms(mask)
         example["instance_images"] = self.transforms(image)
@@ -153,25 +153,24 @@ class MMCelebahq(Dataset):
             max_length=self.tokenizer.model_max_length,
         ).input_ids
         return example
+    
 
-
-if __name__ == "__main__":
-
+def show_mmcelebahq():
     tokenizer = CLIPTokenizer.from_pretrained(
         "checkpoints",
         subfolder="tokenizer",
     )
-    dataset = MMCelebahq(split="val")
+    dataset = MMCelebAHQ(split="val")
     data = dataset[0]
-    print(
-        data["instance_images"].shape,
-        data["instance_masks"].shape,
-        data["instance_prompt_ids"],
-    )
+    # print(
+    #     data["instance_images"].shape,
+    #     data["instance_masks"].shape,
+    #     data["instance_prompt_ids"],
+    # )
     image: torch.Tensor = data["instance_images"]
     mask: torch.Tensor = data["instance_masks"]
     prompt = data["instance_prompt_ids"]
-    text = tokenizer.decode(prompt)
+    text = tokenizer.decode(prompt, skip_special_tokens=True)
 
     mask = mask.squeeze().detach().numpy().astype(np.uint8)
 
@@ -209,10 +208,10 @@ if __name__ == "__main__":
 
     from matplotlib import pyplot as plt
 
-    plt.figure(figsize=(12, 8))
+    plt.figure(figsize=(8, 4))
+    plt.suptitle(text)
     plt.subplot(1, 2, 1)
     plt.imshow(image)
-    plt.title(text, fontsize=8)
     plt.axis("off")
 
     plt.subplot(1, 2, 2)
@@ -220,4 +219,18 @@ if __name__ == "__main__":
     plt.axis("off")
 
     plt.tight_layout()
-    plt.savefig("0.png")
+    plt.savefig("0.jpg", bbox_inches="tight", pad_inches=0)
+
+
+if __name__ == "__main__":
+    # show_mmcelebahq()
+    
+    # Length test
+    assert len(MMCelebAHQ(split="train")) == 27000
+    assert len(MMCelebAHQ(split="val")) == 3000
+    
+    # Shape test
+    dataset = MMCelebAHQ(split="val")
+    data = dataset[0] # 27000
+    assert data["instance_images"].shape == (3, 512, 512)
+    assert data["instance_masks"].shape == (1, 512, 512)

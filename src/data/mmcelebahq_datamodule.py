@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from PIL import Image
 from lightning import LightningDataModule
-from src.data.components import MMCelebahq
+from src.data.components import MMCelebAHQ
 from transformers import CLIPTokenizer
 from torch.utils.data import DataLoader
 
@@ -13,9 +13,9 @@ class MMCelebAHQDataModule(LightningDataModule):
     def __init__(
         self,
         dataset_path="data/mmcelebahq",
-        face_cache="data/mmcelebahq/face.zip",
-        mask_cache="data/mmcelebahq/mask.zip",
-        text_cache="data/mmcelebahq/text.json",
+        face_file="data/mmcelebahq/face.zip",
+        mask_file="data/mmcelebahq/mask.zip",
+        text_file="data/mmcelebahq/text.json",
         size=512,
         batch_size: int = 1,
         num_workers: int = 0,
@@ -28,9 +28,9 @@ class MMCelebAHQDataModule(LightningDataModule):
         # also ensures init params will be stored in ckpt
         self.save_hyperparameters(logger=False)
 
-        self.train_dataset: Optional[MMCelebahq] = None
-        self.val_dataset: Optional[MMCelebahq] = None
-        self.test_dataset: Optional[MMCelebahq] = None
+        self.train_dataset: Optional[MMCelebAHQ] = None
+        self.val_dataset: Optional[MMCelebAHQ] = None
+        self.test_dataset: Optional[MMCelebAHQ] = None
 
         self.batch_size_per_device = batch_size
         self.tokenizer = CLIPTokenizer.from_pretrained(
@@ -46,11 +46,11 @@ class MMCelebAHQDataModule(LightningDataModule):
 
         Do not use it to assign state (self.x = y).
         """
-        MMCelebahq(
+        MMCelebAHQ(
             dataset_path=self.hparams.dataset_path,
-            face_cache=self.hparams.face_cache,
-            mask_cache=self.hparams.mask_cache,
-            text_cache=self.hparams.text_cache,
+            face_file=self.hparams.face_file,
+            mask_file=self.hparams.mask_file,
+            text_file=self.hparams.text_file,
             size=self.hparams.size,
             split="val",
         )
@@ -68,20 +68,20 @@ class MMCelebAHQDataModule(LightningDataModule):
 
         # load and split datasets only if not loaded already
         if not self.train_dataset and not self.val_dataset and not self.test_dataset:
-            self.train_dataset = MMCelebahq(
+            self.train_dataset = MMCelebAHQ(
                 dataset_path=self.hparams.dataset_path,
-                face_cache=self.hparams.face_cache,
-                mask_cache=self.hparams.mask_cache,
-                text_cache=self.hparams.text_cache,
+                face_file=self.hparams.face_file,
+                mask_file=self.hparams.mask_file,
+                text_file=self.hparams.text_file,
                 size=self.hparams.size,
                 split="train",
             )
 
-            self.val_dataset = self.test_dataset = MMCelebahq(
+            self.val_dataset = self.test_dataset = MMCelebAHQ(
                 dataset_path=self.hparams.dataset_path,
-                face_cache=self.hparams.face_cache,
-                mask_cache=self.hparams.mask_cache,
-                text_cache=self.hparams.text_cache,
+                face_file=self.hparams.face_file,
+                mask_file=self.hparams.mask_file,
+                text_file=self.hparams.text_file,
                 size=self.hparams.size,
                 split="val",
             )
@@ -176,9 +176,8 @@ class MMCelebAHQDataModule(LightningDataModule):
         """
         pass
 
-
-if __name__ == "__main__":
-    dataloader = CelebahqDataModule()
+def show_mmcelebahq_dataloader():
+    dataloader = MMCelebAHQDataModule()
     dataloader.setup()
     tokenizer = CLIPTokenizer.from_pretrained(
         "checkpoints",
@@ -191,9 +190,7 @@ if __name__ == "__main__":
         plt.figure(figsize=(12, 8))
 
         instance_prompt_ids = batch["instance_prompt_ids"][0]
-        original_text = tokenizer.decode(
-            instance_prompt_ids, skip_special_tokens=True
-        )
+        original_text = tokenizer.decode(instance_prompt_ids, skip_special_tokens=True)
         print(original_text)
         image = batch["instance_images"][0]
         image = image * 0.5 + 0.5
@@ -204,36 +201,36 @@ if __name__ == "__main__":
         mask = mask.squeeze().detach().numpy().astype(np.uint8)
 
         palette = np.array(
-        [
-            (0, 0, 0),
-            (204, 0, 0),
-            (76, 153, 0),
-            (204, 204, 0),
-            (51, 51, 255),
-            (204, 0, 204),
-            (0, 255, 255),
-            (51, 255, 255),
-            (102, 51, 0),
-            (255, 0, 0),
-            (102, 204, 0),
-            (255, 255, 0),
-            (0, 0, 153),
-            (0, 0, 204),
-            (255, 51, 153),
-            (0, 204, 204),
-            (0, 51, 0),
-            (255, 153, 51),
-            (0, 204, 0),
-        ],
-        dtype=np.uint8,
-    )
+            [
+                (0, 0, 0),
+                (204, 0, 0),
+                (76, 153, 0),
+                (204, 204, 0),
+                (51, 51, 255),
+                (204, 0, 204),
+                (0, 255, 255),
+                (51, 255, 255),
+                (102, 51, 0),
+                (255, 0, 0),
+                (102, 204, 0),
+                (255, 255, 0),
+                (0, 0, 153),
+                (0, 0, 204),
+                (255, 51, 153),
+                (0, 204, 204),
+                (0, 51, 0),
+                (255, 153, 51),
+                (0, 204, 0),
+            ],
+            dtype=np.uint8,
+        )
 
         color_mask = palette[mask]
         color_mask = Image.fromarray(color_mask)
 
         plt.subplot(1, 2, 1)
         plt.imshow(image)
-        plt.title(original_text,fontsize=8)
+        plt.suptitle(original_text)
         plt.axis("off")
         plt.subplot(1, 2, 2)
         plt.imshow(color_mask)
@@ -242,3 +239,7 @@ if __name__ == "__main__":
         plt.tight_layout()
         plt.savefig(f"dataloader_show.png")
         break
+
+
+if __name__ == "__main__":
+    show_mmcelebahq_dataloader()

@@ -1,4 +1,4 @@
 from .dream_booth import DreamBoothDataset
-from .celebahq import CelebahqDataset
+from .mm_celebahq import MMCelebahq
 
-__all__ = ["DreamBoothDataset","CelebahqDataset"]
+__all__ = ["DreamBoothDataset","MMCelebahq"]

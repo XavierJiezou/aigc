@@ -9,7 +9,8 @@ import json
 import random
 from torchvision import transforms
 import torch
-
+from PIL import ImageFile
+ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 class MMCelebAHQ(Dataset):
     def __init__(
@@ -101,7 +102,7 @@ class MMCelebAHQ(Dataset):
 
     def get_image(self, filename):
         filename = os.path.join(self.dataset_path, "image", f"{filename}.jpg")
-        image = Image.open(filename)
+        image = Image.open(filename).convert("RGB")
         return image
 
     def get_mask(self, filename):

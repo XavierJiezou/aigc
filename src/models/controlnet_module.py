@@ -243,7 +243,7 @@ class ControlLitModule(LightningModule):
             labels.
         :param batch_idx: The index of the current batch.
         """
-        loss, preds, targets = self.model_step(batch)
+        loss = self.model_step(batch)
 
         # update and log metrics
         self.test_loss(loss)

@@ -1,0 +1,9 @@
+_target_: src.data.mmcelebahq_datamodule.MMCelebAHQDataModule
+dataset_path: data/mmcelebahq
+face_file: data/mmcelebahq/face.zip
+mask_file: data/mmcelebahq/mask.zip
+text_file: data/mmcelebahq/text.json
+size: 512
+batch_size: 8
+num_workers: 8
+pin_memory: true

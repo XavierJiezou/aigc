@@ -14,11 +14,11 @@ optimizer:
 
 lr_scheduler: constant
 
-unet: stable-diffusion-v1-5/stable-diffusion-v1-5
-vae: stable-diffusion-v1-5/stable-diffusion-v1-5
-text_encoder: stable-diffusion-v1-5/stable-diffusion-v1-5
+unet: checkpoints
+vae: checkpoints
+text_encoder: checkpoints
 froze_components: ["vae","text_encoder","unet"]
 controlnet: null
-diffusion_schedule: stable-diffusion-v1-5/stable-diffusion-v1-5
+diffusion_schedule: checkpoints
 # compile model for faster training with pytorch 2.0
 compile: false

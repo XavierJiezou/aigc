@@ -4,7 +4,7 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: celebahq
+  - override /data: mmcelebahq
   - override /model: controlnet
   - override /callbacks: default
   - override /trainer: gpu
@@ -15,10 +15,6 @@ defaults:
 tags: ["celebahq", "controlnet"]
 
 seed: 42
-
-trainer:
-  min_epochs: 10
-  max_epochs: 400
 
 logger:
   wandb:

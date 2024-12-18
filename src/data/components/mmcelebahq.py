@@ -28,7 +28,7 @@ class MMCelebAHQ(Dataset):
 
         self.filenames = self.get_filenames(split, face_file, mask_file, text_file)
         self.tokenizer = CLIPTokenizer.from_pretrained(
-            "checkpoints",
+            "checkpoints/stablev15",
             subfolder="tokenizer",
         )
         self.mask_transforms = transforms.Compose(
@@ -156,7 +156,7 @@ class MMCelebAHQ(Dataset):
 
 def show_mmcelebahq():
     tokenizer = CLIPTokenizer.from_pretrained(
-        "checkpoints",
+        "checkpoints/stablev15",
         subfolder="tokenizer",
     )
     dataset = MMCelebAHQ(split="val")

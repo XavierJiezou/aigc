@@ -34,7 +34,7 @@ class MMCelebAHQDataModule(LightningDataModule):
 
         self.batch_size_per_device = batch_size
         self.tokenizer = CLIPTokenizer.from_pretrained(
-            "checkpoints",
+            "checkpoints/stablev15",
             subfolder="tokenizer",
         )
 
@@ -180,7 +180,7 @@ def show_mmcelebahq_dataloader():
     dataloader = MMCelebAHQDataModule()
     dataloader.setup()
     tokenizer = CLIPTokenizer.from_pretrained(
-        "checkpoints",
+        "checkpoints/stablev15",
         subfolder="tokenizer",
     )
     from matplotlib import pyplot as plt

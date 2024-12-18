@@ -31,7 +31,7 @@ def get_args():
         type=str,
         default="outputs/controlnet/",
     )
-    parser.add_argument("--tokenizer_id", type=str, default="checkpoints")
+    parser.add_argument("--tokenizer_id", type=str, default="checkpoints/stablev15")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", type=str, default="cuda:4")
     parser.add_argument("--guidance_scale", type=int, default=7)
@@ -52,7 +52,7 @@ def get_pipeline(args):
         subfolder="tokenizer",
     )
     feature_extractor = CLIPFeatureExtractor.from_pretrained(
-        "checkpoints", subfolder="feature_extractor"
+        "checkpoints/stablev15", subfolder="feature_extractor"
     )
     pipeline = StableDiffusionControlNetPipeline(
         vae=model.vae,
@@ -101,7 +101,7 @@ def main():
     base_name = os.path.basename(args.mask)
     output_path = os.path.join(args.output_dir,base_name)
     image.save(output_path)
-    print(f"done.image saved to {args.output_path}")
+    print(f"done.image saved to {output_path}")
 
 
 if __name__ == "__main__":

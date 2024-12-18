@@ -169,7 +169,7 @@ class DiffusionLitModule(LightningModule):
 
         # update and log metrics
         self.val_loss(loss)
-        self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
 
     def test_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
@@ -216,7 +216,7 @@ class DiffusionLitModule(LightningModule):
                 "optimizer": optimizer,
                 "lr_scheduler": {
                     "scheduler": scheduler,
-                    "monitor": "val/loss",
+                    "monitor": "val_loss",
                     "interval": "epoch",
                     "frequency": 1,
                 },

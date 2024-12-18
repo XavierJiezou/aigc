@@ -9,8 +9,6 @@ import json
 import random
 from torchvision import transforms
 import torch
-from PIL import ImageFile
-ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 class MMCelebAHQ(Dataset):
     def __init__(
@@ -101,7 +99,7 @@ class MMCelebAHQ(Dataset):
         return len(self.filenames)
 
     def get_image(self, filename):
-        filename = os.path.join(self.dataset_path, "image", f"{filename}.jpg")
+        filename = os.path.join(self.dataset_path, "face", f"{filename}.jpg")
         image = Image.open(filename).convert("RGB")
         return image
 
@@ -111,7 +109,7 @@ class MMCelebAHQ(Dataset):
         return mask
 
     def get_text(self, filename):
-        filename = os.path.join(self.dataset_path, "caption", f"{filename}.txt")
+        filename = os.path.join(self.dataset_path, "text", f"{filename}.txt")
         with open(filename, "r") as f:
             prompts = f.readlines()
         caption = random.choices(prompts)[0]

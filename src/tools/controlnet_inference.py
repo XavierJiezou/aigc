@@ -10,8 +10,6 @@ from transformers import CLIPTokenizer, CLIPFeatureExtractor
 from omegaconf import OmegaConf
 from diffusers import StableDiffusionControlNetPipeline
 
-# torch.set_float32_matmul_precision('high')
-
 def get_args():
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -23,15 +21,15 @@ def get_args():
     parser.add_argument(
         "--ckpt_path",
         type=str,
-        default="logs/train/runs/controlnet/2024-12-18_00-35-44/checkpoints/epoch=000-val_loss=0.0000.ckpt",
+        default="last.ckpt",
     )
     parser.add_argument(
         "--model_config", type=str, default="configs/model/controlnet.yaml"
     )
     parser.add_argument(
-        "--output_path",
+        "--output_dir",
         type=str,
-        default="outputs/controlnet/face.png",
+        default="outputs/controlnet/",
     )
     parser.add_argument("--tokenizer_id", type=str, default="checkpoints")
     parser.add_argument("--seed", type=int, default=42)
@@ -99,8 +97,10 @@ def main():
         num_inference_steps=args.num_inference_steps,
         generator=generator,
     ).images[0]
-    os.makedirs(os.path.dirname(args.output_path), exist_ok=True)
-    image.save(args.output_path)
+    os.makedirs(args.output_dir, exist_ok=True)
+    base_name = os.path.basename(args.mask)
+    output_path = os.path.join(args.output_dir,base_name)
+    image.save(output_path)
     print(f"done.image saved to {args.output_path}")
 
 

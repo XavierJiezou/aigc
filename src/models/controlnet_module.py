@@ -209,7 +209,7 @@ class ControlLitModule(LightningModule):
         # update and log metrics
         self.train_loss(loss)
         self.log(
-            "train/loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True
+            "train_loss", self.train_loss, on_step=False, on_epoch=True, prog_bar=True
         )
 
         # return loss or backpropagation will fail
@@ -232,7 +232,7 @@ class ControlLitModule(LightningModule):
 
         # update and log metrics
         self.val_loss(loss)
-        self.log("val/loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
+        self.log("val_loss", self.val_loss, on_step=False, on_epoch=True, prog_bar=True)
 
     def test_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int
@@ -248,7 +248,7 @@ class ControlLitModule(LightningModule):
         # update and log metrics
         self.test_loss(loss)
         self.log(
-            "test/loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True
+            "test_loss", self.test_loss, on_step=False, on_epoch=True, prog_bar=True
         )
 
     def setup(self, stage: str) -> None:

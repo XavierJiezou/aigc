@@ -1,9 +1,12 @@
 _target_: src.data.mmcelebahq_datamodule.MMCelebAHQDataModule
-dataset_path: data/mmcelebahq
+root: data/mmcelebahq
 face_file: null
 mask_file: null
 text_file: data/mmcelebahq/text.json
 size: 512
+t_drop_rate: 0.05
+i_drop_rate: 0.05
+ti_drop_rate: 0.05
 batch_size: 8
-num_workers: 8
+num_workers: 4
 pin_memory: true

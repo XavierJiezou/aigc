@@ -8,39 +8,36 @@ import zipfile
 import json
 import random
 from torchvision import transforms
-from transformers import CLIPImageProcessor
 import torch
-
 
 class MMCelebAHQ(Dataset):
     def __init__(
         self,
-        root="data/mmcelebahq",
+        dataset_path="data/mmcelebahq",
         split: Literal["train", "val"] = "train",
         face_file="data/mmcelebahq/face.zip",
         mask_file="data/mmcelebahq/mask.zip",
         text_file="data/mmcelebahq/text.json",
         size=512,
-        t_drop_rate=0.05,
-        i_drop_rate=0.05,
-        ti_drop_rate=0.05,
     ):
-
-        self.root = root
+        self.dataset_path = dataset_path
         self.split = split
-        self.t_drop_rate = t_drop_rate
-        self.i_drop_rate = i_drop_rate
-        self.ti_drop_rate = ti_drop_rate
         self.face_file = None
         self.mask_file = None
         self.text_file = None
-
-        self.clip_image_processor = CLIPImageProcessor()
 
         self.filenames = self.get_filenames(split, face_file, mask_file, text_file)
         self.tokenizer = CLIPTokenizer.from_pretrained(
             "checkpoints/stablev15",
             subfolder="tokenizer",
+        )
+        self.mask_transforms = transforms.Compose(
+            [
+                transforms.Resize(size),
+                transforms.CenterCrop(size),
+                transforms.PILToTensor(),
+                transforms.Lambda(lambda x: x.float()),  # 转换为 float 类型
+            ]
         )
         self.transforms = transforms.Compose(
             [
@@ -102,17 +99,17 @@ class MMCelebAHQ(Dataset):
         return len(self.filenames)
 
     def get_image(self, filename):
-        filename = os.path.join(self.root, "face", f"{filename}.jpg")
+        filename = os.path.join(self.dataset_path, "face", f"{filename}.jpg")
         image = Image.open(filename).convert("RGB")
         return image
 
     def get_mask(self, filename):
-        filename = os.path.join(self.root, "mask", f"{filename}.png")
+        filename = os.path.join(self.dataset_path, "mask", f"{filename}.png")
         mask = Image.fromarray(np.array(Image.open(filename)), mode="L")
         return mask
 
     def get_text(self, filename):
-        filename = os.path.join(self.root, "text", f"{filename}.txt")
+        filename = os.path.join(self.dataset_path, "text", f"{filename}.txt")
         with open(filename, "r") as f:
             prompts = f.readlines()
         caption = random.choices(prompts)[0]
@@ -127,13 +124,13 @@ class MMCelebAHQ(Dataset):
         prompt = None
 
         if self.face_file is not None:
-            face_name = os.path.join(self.root, "face", f"{index}.jpg")
+            face_name = os.path.join(self.dataset_path, "face", f"{index}.jpg")
             image = self.face_file[face_name]
         else:
             image = self.get_image(index)
 
         if self.mask_file is not None:
-            mask_name = os.path.join(self.root, "mask", f"{index}.png")
+            mask_name = os.path.join(self.dataset_path, "mask", f"{index}.png")
             mask = self.mask_file[mask_name]
         else:
             mask = self.get_mask(index)
@@ -145,33 +142,17 @@ class MMCelebAHQ(Dataset):
         else:
             prompt = self.get_text(index)
 
-        # random drop reference to:https://github.com/tencent-ailab/IP-Adapter/blob/main/tutorial_train.py#L102
-        drop_image_embed = 0
-        rand_num = random.random()
-        if rand_num < self.i_drop_rate:
-            drop_image_embed = 1
-        elif rand_num < (self.i_drop_rate + self.t_drop_rate):
-            prompt = ""
-        elif rand_num < (self.i_drop_rate + self.t_drop_rate + self.ti_drop_rate):
-            prompt = ""
-            drop_image_embed = 1
-
-        clip_image = self.clip_image_processor(
-            images=mask, return_tensors="pt"
-        ).pixel_values
-
+        mask = self.mask_transforms(mask)
         example["instance_images"] = self.transforms(image)
+        example["instance_masks"] = mask
         example["instance_prompt_ids"] = self.tokenizer(
             prompt,
-            padding="max_length",
+            padding="do_not_pad",
             truncation=True,
             max_length=self.tokenizer.model_max_length,
-            return_tensors="pt"
         ).input_ids
-        example["clip_image"] = clip_image
-        example["drop_image_embed"] = drop_image_embed
         return example
-
+    
 
 def show_mmcelebahq():
     tokenizer = CLIPTokenizer.from_pretrained(
@@ -186,11 +167,11 @@ def show_mmcelebahq():
     #     data["instance_prompt_ids"],
     # )
     image: torch.Tensor = data["instance_images"]
-    mask: Image.Image = data["instance_masks"]
-    mask = np.array(mask)
-    prompt = data["instance_prompt_ids"][0]
+    mask: torch.Tensor = data["instance_masks"]
+    prompt = data["instance_prompt_ids"]
     text = tokenizer.decode(prompt, skip_special_tokens=True)
 
+    mask = mask.squeeze().detach().numpy().astype(np.uint8)
 
     palette = np.array(
         [
@@ -241,16 +222,14 @@ def show_mmcelebahq():
 
 
 if __name__ == "__main__":
-    show_mmcelebahq()
-
+    # show_mmcelebahq()
+    
     # Length test
     assert len(MMCelebAHQ(split="train")) == 27000
     assert len(MMCelebAHQ(split="val")) == 3000
-
+    
     # Shape test
     dataset = MMCelebAHQ(split="val")
-    data = dataset[0]  # 27000
+    data = dataset[0] # 27000
     assert data["instance_images"].shape == (3, 512, 512)
-    assert data['clip_image'].shape == (1,3,224,224)
-    assert data['instance_prompt_ids'].shape == (1,77)
-
+    assert data["instance_masks"].shape == (1, 512, 512)

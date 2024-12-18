@@ -12,16 +12,13 @@ class MMCelebAHQDataModule(LightningDataModule):
 
     def __init__(
         self,
-        root="data/mmcelebahq",
+        dataset_path="data/mmcelebahq",
         face_file="data/mmcelebahq/face.zip",
         mask_file="data/mmcelebahq/mask.zip",
         text_file="data/mmcelebahq/text.json",
         size=512,
         batch_size: int = 1,
         num_workers: int = 0,
-        t_drop_rate=0.05,
-        i_drop_rate=0.05,
-        ti_drop_rate=0.05,
         pin_memory: bool = True,
     ) -> None:
         """Initialize a `MNISTDataModule`."""
@@ -50,27 +47,12 @@ class MMCelebAHQDataModule(LightningDataModule):
         Do not use it to assign state (self.x = y).
         """
         MMCelebAHQ(
-            root=self.hparams.root,
-            face_file=self.hparams.face_file,
-            mask_file=self.hparams.mask_file,
-            text_file=self.hparams.text_file,
-            size=self.hparams.size,
-            split="train",
-            t_drop_rate=self.hparams.t_drop_rate,
-            i_drop_rate=self.hparams.i_drop_rate,
-            ti_drop_rate=self.hparams.ti_drop_rate,
-        )
-
-        MMCelebAHQ(
-            root=self.hparams.root,
+            dataset_path=self.hparams.dataset_path,
             face_file=self.hparams.face_file,
             mask_file=self.hparams.mask_file,
             text_file=self.hparams.text_file,
             size=self.hparams.size,
             split="val",
-            t_drop_rate=self.hparams.t_drop_rate,
-            i_drop_rate=self.hparams.i_drop_rate,
-            ti_drop_rate=self.hparams.ti_drop_rate,
         )
 
     def setup(self, stage: Optional[str] = None) -> None:
@@ -87,45 +69,44 @@ class MMCelebAHQDataModule(LightningDataModule):
         # load and split datasets only if not loaded already
         if not self.train_dataset and not self.val_dataset and not self.test_dataset:
             self.train_dataset = MMCelebAHQ(
-                root=self.hparams.root,
+                dataset_path=self.hparams.dataset_path,
                 face_file=self.hparams.face_file,
                 mask_file=self.hparams.mask_file,
                 text_file=self.hparams.text_file,
                 size=self.hparams.size,
                 split="train",
-                t_drop_rate=self.hparams.t_drop_rate,
-                i_drop_rate=self.hparams.i_drop_rate,
-                ti_drop_rate=self.hparams.ti_drop_rate,
             )
 
             self.val_dataset = self.test_dataset = MMCelebAHQ(
-                root=self.hparams.root,
+                dataset_path=self.hparams.dataset_path,
                 face_file=self.hparams.face_file,
                 mask_file=self.hparams.mask_file,
                 text_file=self.hparams.text_file,
                 size=self.hparams.size,
                 split="val",
-                t_drop_rate=self.hparams.t_drop_rate,
-                i_drop_rate=self.hparams.i_drop_rate,
-                ti_drop_rate=self.hparams.ti_drop_rate,
             )
 
     def collate_fn(self, examples):
         input_ids = [example["instance_prompt_ids"] for example in examples]
-
-        input_ids = torch.cat(input_ids,dim=0)
         pixel_values = [example["instance_images"] for example in examples]
-        drop_image_embeds = [example["drop_image_embed"] for example in examples]
-        clip_images = torch.cat([example["clip_image"] for example in examples], dim=0)
+        instance_masks = [example["instance_masks"] for example in examples]
 
         pixel_values = torch.stack(pixel_values)
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
 
+        instance_masks = torch.stack(instance_masks)
+        instance_masks = instance_masks.to(
+            memory_format=torch.contiguous_format
+        ).float()
+
+        input_ids = self.tokenizer.pad(
+            {"input_ids": input_ids}, padding=True, return_tensors="pt"
+        ).input_ids
+
         batch = {
             "instance_prompt_ids": input_ids,
             "instance_images": pixel_values,
-            "drop_image_embeds": drop_image_embeds,
-            "clip_images": clip_images,
+            "instance_masks": instance_masks,
         }
         return batch
 
@@ -194,7 +175,6 @@ class MMCelebAHQDataModule(LightningDataModule):
         :param state_dict: The datamodule state returned by `self.state_dict()`.
         """
         pass
-
 
 def show_mmcelebahq_dataloader():
     dataloader = MMCelebAHQDataModule()

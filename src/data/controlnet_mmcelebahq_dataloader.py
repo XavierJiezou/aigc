@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from PIL import Image
 from lightning import LightningDataModule
-from src.data.components import MMCelebAHQ
+from src.data.components.controlnet_mmcelebahq import MMCelebAHQ
 from transformers import CLIPTokenizer
 from torch.utils.data import DataLoader
 

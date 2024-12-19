@@ -4,7 +4,7 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: mmcelebahq
+  - override /data: controlnet_mmcelebahq
   - override /model: controlnet
   - override /callbacks: default
   - override /trainer: gpu

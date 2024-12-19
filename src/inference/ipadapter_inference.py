@@ -1,3 +1,8 @@
+import warnings
+
+warnings.filterwarnings("ignore")
+import shutil
+import imageio
 import argparse
 import os
 from transformers import CLIPTokenizer, CLIPFeatureExtractor
@@ -8,6 +13,7 @@ import torch
 from diffusers import StableDiffusionPipeline
 from PIL import Image
 from transformers import CLIPImageProcessor
+from matplotlib import pyplot as plt
 import numpy as np
 from src.models.ipadapter_module import IPAdapterLitModule
 
@@ -16,13 +22,16 @@ def get_generator(seed, device):
 
     if seed is not None:
         if isinstance(seed, list):
-            generator = [torch.Generator(device).manual_seed(seed_item) for seed_item in seed]
+            generator = [
+                torch.Generator(device).manual_seed(seed_item) for seed_item in seed
+            ]
         else:
             generator = torch.Generator(device).manual_seed(seed)
     else:
         generator = None
 
     return generator
+
 
 class IPAdapterPipeline:
     def __init__(
@@ -90,7 +99,9 @@ class IPAdapterPipeline:
         if prompt is None:
             prompt = "best quality, high quality"
         if negative_prompt is None:
-            negative_prompt = "monochrome, lowres, bad anatomy, worst quality, low quality"
+            negative_prompt = (
+                "monochrome, lowres, bad anatomy, worst quality, low quality"
+            )
 
         if not isinstance(prompt, List):
             prompt = [prompt] * num_prompts
@@ -102,9 +113,15 @@ class IPAdapterPipeline:
         )
         bs_embed, seq_len, _ = image_prompt_embeds.shape
         image_prompt_embeds = image_prompt_embeds.repeat(1, num_samples, 1)
-        image_prompt_embeds = image_prompt_embeds.view(bs_embed * num_samples, seq_len, -1)
-        uncond_image_prompt_embeds = uncond_image_prompt_embeds.repeat(1, num_samples, 1)
-        uncond_image_prompt_embeds = uncond_image_prompt_embeds.view(bs_embed * num_samples, seq_len, -1)
+        image_prompt_embeds = image_prompt_embeds.view(
+            bs_embed * num_samples, seq_len, -1
+        )
+        uncond_image_prompt_embeds = uncond_image_prompt_embeds.repeat(
+            1, num_samples, 1
+        )
+        uncond_image_prompt_embeds = uncond_image_prompt_embeds.view(
+            bs_embed * num_samples, seq_len, -1
+        )
 
         with torch.inference_mode():
             prompt_embeds_, negative_prompt_embeds_ = self.sd_pipeline.encode_prompt(
@@ -114,10 +131,15 @@ class IPAdapterPipeline:
                 do_classifier_free_guidance=True,
                 negative_prompt=negative_prompt,
             )
-            prompt_embeds = self.do_mask_text_attn(mask_features=image_prompt_embeds,text_features=prompt_embeds_)
+            prompt_embeds = self.do_mask_text_attn(
+                mask_features=image_prompt_embeds, text_features=prompt_embeds_
+            )
             # prompt_embeds = torch.cat([prompt_embeds_, image_prompt_embeds], dim=1)
             # negative_prompt_embeds = torch.cat([negative_prompt_embeds_, uncond_image_prompt_embeds], dim=1)
-            negative_prompt_embeds = self.do_mask_text_attn(mask_features=uncond_image_prompt_embeds,text_features=negative_prompt_embeds_)
+            negative_prompt_embeds = self.do_mask_text_attn(
+                mask_features=uncond_image_prompt_embeds,
+                text_features=negative_prompt_embeds_,
+            )
 
         generator = get_generator(seed, self.device)
 
@@ -144,7 +166,7 @@ def get_args():
     parser.add_argument(
         "--ckpt_path",
         type=str,
-        default="last.ckpt",
+        default="logs/train/runs/ipadapter/2024-12-18_21-30-54/checkpoints/epoch=002-val_loss=0.1439.ckpt",
     )
     parser.add_argument(
         "--model_config", type=str, default="configs/model/ipadapter.yaml"
@@ -161,6 +183,13 @@ def get_args():
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--num_inference_steps", type=int, default=50)
+    parser.add_argument(
+        "--save_denoising",
+        action="store_true",
+        help="Whether to save the denoising results",
+    )
+    parser.add_argument("--tmp_dir", type=str, default="tmp")
+    parser.add_argument("--duration", type=int, default=1)
     args = parser.parse_args()
     return args
 
@@ -190,8 +219,26 @@ def get_pipeline(args):
     ).to(args.device)
     # pipeline.unet = torch.compile(pipeline.unet, mode="reduce-overhead", fullgraph=True)
     # pipeline.enable_xformers_memory_efficient_attention()
-    ipadapter_pipe = IPAdapterPipeline(sd_pipeline=pipeline,ipadapter=model,device=args.device)
+    ipadapter_pipe = IPAdapterPipeline(
+        sd_pipeline=pipeline, ipadapter=model, device=args.device
+    )
     return ipadapter_pipe
+
+
+def get_gif(args):
+    filenames = [
+        os.path.join(args.tmp_dir, f"{i}.png")
+        for i in range(0, args.num_inference_steps)
+    ]
+    base_name = os.path.basename(args.mask).split(".")[0]
+    save_path = os.path.join(args.output_dir, f"denoising_process_{base_name}.gif")
+    with imageio.get_writer(save_path, mode="I", duration=args.duration) as writer:
+        for filename in filenames:
+            im = imageio.imread(filename)
+            writer.append_data(im)
+    print(f"{save_path} has saved!")
+    shutil.rmtree(args.tmp_dir)
+    print(f"temp dir has been removed!")
 
 
 def main():
@@ -201,20 +248,66 @@ def main():
     print("start inference...")
 
     mask = Image.fromarray(np.array(Image.open(args.mask)), mode="L")
-
-    image = pipeline.generate(
-        pil_image=mask,
-        prompt=args.prompt,
-        image=mask,
-        height=args.height,
-        width=args.width,
-        num_inference_steps=args.num_inference_steps,
-        seed=args.seed,
-        guidance_scale=args.guidance_scale,
-    )[0]
+    generator = get_generator(args.seed, args.device)
     os.makedirs(args.output_dir, exist_ok=True)
+
+    def decode_tensors(pipe, step, timestep, callback_kwargs):
+        latents = callback_kwargs["latents"]
+        image = pipe.vae.decode(
+            latents / pipe.vae.config.scaling_factor,
+            return_dict=False,
+            generator=generator,
+        )[0]
+        image, has_nsfw_concept = pipe.run_safety_checker(
+            image, args.device, torch.float32
+        )
+        if has_nsfw_concept is None:
+            do_denormalize = [True] * image.shape[0]
+        else:
+            do_denormalize = [not has_nsfw for has_nsfw in has_nsfw_concept]
+        image = pipe.image_processor.postprocess(
+            image, output_type="pil", do_denormalize=do_denormalize
+        )[0]
+
+        tmp_save_path = os.path.join(args.tmp_dir, f"{step}.png")
+
+        plt.imshow(image)
+        plt.title(f"step:{step+1}")
+        plt.axis("off")
+        plt.savefig(tmp_save_path)
+        plt.close()
+        return callback_kwargs
+
+    if args.save_denoising:
+        print(f"create temp dir:{args.tmp_dir}")
+        os.makedirs(args.tmp_dir, exist_ok=True)
+        image = pipeline.generate(
+            pil_image=mask,
+            prompt=args.prompt,
+            image=mask,
+            height=args.height,
+            width=args.width,
+            num_inference_steps=args.num_inference_steps,
+            seed=args.seed,
+            guidance_scale=args.guidance_scale,
+            callback_on_step_end=decode_tensors,
+            callback_on_step_end_tensor_inputs=["latents"],
+        )[0]
+        get_gif(args)
+    else:
+        image = pipeline.generate(
+            pil_image=mask,
+            prompt=args.prompt,
+            image=mask,
+            height=args.height,
+            width=args.width,
+            num_inference_steps=args.num_inference_steps,
+            seed=args.seed,
+            guidance_scale=args.guidance_scale,
+        )[0]
+
     base_name = os.path.basename(args.mask)
-    output_path = os.path.join(args.output_dir,base_name)
+    output_path = os.path.join(args.output_dir, base_name)
     image.save(output_path)
     print(f"done.image saved to {output_path}")
 

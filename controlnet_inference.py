@@ -1,34 +1,45 @@
 import warnings
-warnings.filterwarnings('ignore')
+
+warnings.filterwarnings("ignore")
 import argparse
 import torch
-import os
-import imageio
 import shutil
-from src.models.diffusion_module import DiffusionLitModule
+import os
+from src.models.controlnet_module import ControlLitModule
 import hydra
+from PIL import Image
+import numpy as np
 from matplotlib import pyplot as plt
-from transformers import CLIPTokenizer
+from torchvision import transforms
+from transformers import CLIPTokenizer, CLIPFeatureExtractor
 from omegaconf import OmegaConf
-from diffusers import StableDiffusionPipeline
+import matplotlib.animation as animation
+from diffusers import StableDiffusionControlNetPipeline
+import imageio
 
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--prompt", type=str, default="a photo of a corgi dog")
-    parser.add_argument("--ckpt_path", type=str, default=None)
     parser.add_argument(
-        "--model_config", type=str, default="configs/model/stable_diffusion.yaml"
+        "--prompt",
+        type=str,
+        default="She wears heavy makeup. She has mouth slightly open. She is smiling, and attractive.",
+    )
+    parser.add_argument("--mask", default="data/mmcelebahq/mask/27504.png")
+    parser.add_argument(
+        "--ckpt_path",
+        type=str,
+        default="last.ckpt",
+    )
+    parser.add_argument(
+        "--model_config", type=str, default="configs/model/controlnet.yaml"
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="outputs/stable_diffusion",
+        default="outputs/controlnet/",
     )
-    parser.add_argument("--image_name",type=str,default="sd.png")
-    parser.add_argument(
-        "--tokenizer_id", type=str, default="checkpoints/stablev15"
-    )
+    parser.add_argument("--tokenizer_id", type=str, default="checkpoints/stablev15")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", type=str, default="cuda:4")
     parser.add_argument("--guidance_scale", type=int, default=7.5)
@@ -46,12 +57,42 @@ def get_args():
     return args
 
 
+def get_pipeline(args):
+    ckpt = torch.load(args.ckpt_path, map_location="cpu")
+    model_config = OmegaConf.load(args.model_config)  # 加载model config file
+    model: ControlLitModule = hydra.utils.instantiate(model_config)
+    model.load_state_dict(ckpt["state_dict"])
+    tokenizer = CLIPTokenizer.from_pretrained(
+        args.tokenizer_id,
+        subfolder="tokenizer",
+    )
+    feature_extractor = CLIPFeatureExtractor.from_pretrained(
+        "checkpoints/stablev15", subfolder="feature_extractor"
+    )
+    pipeline = StableDiffusionControlNetPipeline(
+        vae=model.vae,
+        text_encoder=model.text_encoder,
+        unet=model.unet,
+        feature_extractor=feature_extractor,
+        tokenizer=tokenizer,
+        scheduler=model.diffusion_schedule,
+        safety_checker=None,
+        controlnet=model.controlnet,
+    ).to(args.device)
+    # pipeline.unet = torch.compile(pipeline.unet, mode="reduce-overhead", fullgraph=True)
+    # pipeline.enable_xformers_memory_efficient_attention()
+    del ckpt
+    del model
+    return pipeline
+
+
 def get_gif(args):
     filenames = [
         os.path.join(args.tmp_dir, f"{i}.png")
         for i in range(0, args.num_inference_steps)
     ]
-    save_path = os.path.join(args.output_dir, f"denoising_process_{args.image_name}.gif")
+    base_name = os.path.basename(args.mask).split(".")[0]
+    save_path = os.path.join(args.output_dir, f"denoising_process_{base_name}.gif")
     with imageio.get_writer(save_path, mode="I", duration=args.duration) as writer:
         for filename in filenames:
             im = imageio.imread(filename)
@@ -61,37 +102,23 @@ def get_gif(args):
     print(f"temp dir has been removed!")
 
 
-def get_pipeline(args):
-    ckpt = None
-    if ckpt is not None:
-        ckpt = torch.load(args.ckpt_path, map_location=args.device)
-    model_config = OmegaConf.load(args.model_config)  # 加载model config file
-    model: DiffusionLitModule = hydra.utils.instantiate(model_config)
-    if ckpt is not None:
-        model.load_state_dict(ckpt["state_dict"])
-    tokenizer = CLIPTokenizer.from_pretrained(
-        args.tokenizer_id,
-        subfolder="tokenizer",
-    )
-    pipeline = StableDiffusionPipeline(
-        vae=model.vae,
-        text_encoder=model.text_encoder,
-        unet=model.unet,
-        feature_extractor=model.feature_extractor,
-        tokenizer=tokenizer,
-        scheduler=model.diffusion_schedule,
-        safety_checker=None,
-    ).to(args.device)
-    del ckpt
-    del model
-    return pipeline
-
-
 def main():
     args = get_args()
     print("init pipeline...")
-    pipeline: StableDiffusionPipeline = get_pipeline(args)
+    pipeline: StableDiffusionControlNetPipeline = get_pipeline(args)
     print("start inference...")
+
+    mask = Image.fromarray(np.array(Image.open(args.mask)), mode="L")
+
+    mask_transforms = transforms.Compose(
+        [
+            transforms.Resize((args.height, args.width)),
+            transforms.CenterCrop((args.height, args.width)),
+            transforms.PILToTensor(),
+            transforms.Lambda(lambda x: x.float()),  # 转换为 float 类型
+        ]
+    )
+    mask = mask_transforms(mask)
     generator = torch.Generator().manual_seed(args.seed)
 
     def decode_tensors(pipe, step, timestep, callback_kwargs):
@@ -127,6 +154,7 @@ def main():
         os.makedirs(args.tmp_dir, exist_ok=True)
         image = pipeline.__call__(
             prompt=args.prompt,
+            image=mask,
             height=args.height,
             width=args.width,
             num_inference_steps=args.num_inference_steps,
@@ -137,13 +165,17 @@ def main():
         get_gif(args)
     else:
         image = pipeline.__call__(
-            args.prompt,
+            prompt=args.prompt,
+            image=mask,
             height=args.height,
             width=args.width,
             num_inference_steps=args.num_inference_steps,
             generator=generator,
+            callback_on_step_end=decode_tensors,
+            callback_on_step_end_tensor_inputs=["latents"],
         ).images[0]
-    output_path = os.path.join(args.output_dir, args.image_name)
+    base_name = os.path.basename(args.mask)
+    output_path = os.path.join(args.output_dir, base_name)
     image.save(output_path)
     print(f"done.image saved to {output_path}")
 

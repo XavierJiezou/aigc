@@ -14,10 +14,10 @@ optimizer:
 
 scheduler: null
 
-unet: CompVis/stable-diffusion-v1-4
-vae: CompVis/stable-diffusion-v1-4
-text_encoder: CompVis/stable-diffusion-v1-4
-feature_extractor: openai/clip-vit-base-patch32
+unet: checkpoints/stablev15
+vae: checkpoints/stablev15
+text_encoder: checkpoints/stablev15
+feature_extractor: checkpoints/clip_large_patch14
 diffusion_schedule:
   _target_: diffusers.DDPMScheduler
   beta_start: 0.00085

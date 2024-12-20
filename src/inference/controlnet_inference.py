@@ -1,14 +1,22 @@
+import warnings
+
+warnings.filterwarnings("ignore")
 import argparse
 import torch
+import shutil
 import os
 from src.models.controlnet_module import ControlLitModule
 import hydra
 from PIL import Image
 import numpy as np
+from matplotlib import pyplot as plt
 from torchvision import transforms
 from transformers import CLIPTokenizer, CLIPFeatureExtractor
 from omegaconf import OmegaConf
+import matplotlib.animation as animation
 from diffusers import StableDiffusionControlNetPipeline
+import imageio
+
 
 def get_args():
     parser = argparse.ArgumentParser()
@@ -38,6 +46,13 @@ def get_args():
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--num_inference_steps", type=int, default=50)
+    parser.add_argument(
+        "--save_denoising",
+        action="store_true",
+        help="Whether to save the denoising results",
+    )
+    parser.add_argument("--tmp_dir", type=str, default="tmp")
+    parser.add_argument("--duration", type=int, default=1)
     args = parser.parse_args()
     return args
 
@@ -71,12 +86,27 @@ def get_pipeline(args):
     return pipeline
 
 
+def get_gif(args):
+    filenames = [
+        os.path.join(args.tmp_dir, f"{i}.png")
+        for i in range(0, args.num_inference_steps)
+    ]
+    base_name = os.path.basename(args.mask).split(".")[0]
+    save_path = os.path.join(args.output_dir, f"denoising_process_{base_name}.gif")
+    with imageio.get_writer(save_path, mode="I", duration=args.duration) as writer:
+        for filename in filenames:
+            im = imageio.imread(filename)
+            writer.append_data(im)
+    print(f"{save_path} has saved!")
+    shutil.rmtree(args.tmp_dir)
+    print(f"temp dir has been removed!")
+
+
 def main():
     args = get_args()
     print("init pipeline...")
     pipeline: StableDiffusionControlNetPipeline = get_pipeline(args)
     print("start inference...")
-    generator = torch.Generator().manual_seed(args.seed)
 
     mask = Image.fromarray(np.array(Image.open(args.mask)), mode="L")
 
@@ -89,17 +119,63 @@ def main():
         ]
     )
     mask = mask_transforms(mask)
-    image = pipeline.__call__(
-        prompt=args.prompt,
-        image=mask,
-        height=args.height,
-        width=args.width,
-        num_inference_steps=args.num_inference_steps,
-        generator=generator,
-    ).images[0]
+    generator = torch.Generator().manual_seed(args.seed)
+
+    def decode_tensors(pipe, step, timestep, callback_kwargs):
+        latents = callback_kwargs["latents"]
+        image = pipe.vae.decode(
+            latents / pipe.vae.config.scaling_factor,
+            return_dict=False,
+            generator=generator,
+        )[0]
+        image, has_nsfw_concept = pipe.run_safety_checker(
+            image, args.device, torch.float32
+        )
+        if has_nsfw_concept is None:
+            do_denormalize = [True] * image.shape[0]
+        else:
+            do_denormalize = [not has_nsfw for has_nsfw in has_nsfw_concept]
+        image = pipe.image_processor.postprocess(
+            image, output_type="pil", do_denormalize=do_denormalize
+        )[0]
+
+        tmp_save_path = os.path.join(args.tmp_dir, f"{step}.png")
+
+        plt.imshow(image)
+        plt.title(f"step:{step+1}")
+        plt.axis("off")
+        plt.savefig(tmp_save_path)
+        plt.close()
+        return callback_kwargs
+
     os.makedirs(args.output_dir, exist_ok=True)
+    if args.save_denoising:
+        print(f"create temp dir:{args.tmp_dir}")
+        os.makedirs(args.tmp_dir, exist_ok=True)
+        image = pipeline.__call__(
+            prompt=args.prompt,
+            image=mask,
+            height=args.height,
+            width=args.width,
+            num_inference_steps=args.num_inference_steps,
+            generator=generator,
+            callback_on_step_end=decode_tensors,
+            callback_on_step_end_tensor_inputs=["latents"],
+        ).images[0]
+        get_gif(args)
+    else:
+        image = pipeline.__call__(
+            prompt=args.prompt,
+            image=mask,
+            height=args.height,
+            width=args.width,
+            num_inference_steps=args.num_inference_steps,
+            generator=generator,
+            callback_on_step_end=decode_tensors,
+            callback_on_step_end_tensor_inputs=["latents"],
+        ).images[0]
     base_name = os.path.basename(args.mask)
-    output_path = os.path.join(args.output_dir,base_name)
+    output_path = os.path.join(args.output_dir, base_name)
     image.save(output_path)
     print(f"done.image saved to {output_path}")
 

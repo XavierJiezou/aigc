@@ -29,7 +29,7 @@ def get_args():
     parser.add_argument(
         "--ckpt_path",
         type=str,
-        default="last.ckpt",
+        default="logs/train/runs/controlnet/2024-12-18_13-02-29/checkpoints/epoch=002-val_loss=0.1412.ckpt",
     )
     parser.add_argument(
         "--model_config", type=str, default="configs/model/controlnet.yaml"
@@ -171,8 +171,6 @@ def main():
             width=args.width,
             num_inference_steps=args.num_inference_steps,
             generator=generator,
-            callback_on_step_end=decode_tensors,
-            callback_on_step_end_tensor_inputs=["latents"],
         ).images[0]
     base_name = os.path.basename(args.mask)
     output_path = os.path.join(args.output_dir, base_name)

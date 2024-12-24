@@ -94,7 +94,7 @@ def get_args():
         type=int,
         nargs=2,
         metavar=("START", "END"),
-        default=[29063, 30000],
+        default=[27000, 30000],
         help="Range of mask indices to process",
     )
     parser.add_argument("--tokenizer_id", type=str, default="checkpoints/stablev15")

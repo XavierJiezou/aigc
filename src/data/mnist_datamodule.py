@@ -5,6 +5,7 @@ from lightning import LightningDataModule
 from torch.utils.data import ConcatDataset, DataLoader, Dataset, random_split
 from torchvision.datasets import MNIST
 from torchvision.transforms import transforms
+from matplotlib import pyplot as plt
 
 
 class MNISTDataModule(LightningDataModule):
@@ -57,6 +58,7 @@ class MNISTDataModule(LightningDataModule):
         data_dir: str = "data/",
         train_val_test_split: Tuple[int, int, int] = (55_000, 5_000, 10_000),
         batch_size: int = 64,
+        size=256,
         num_workers: int = 0,
         pin_memory: bool = False,
     ) -> None:
@@ -76,7 +78,11 @@ class MNISTDataModule(LightningDataModule):
 
         # data transformations
         self.transforms = transforms.Compose(
-            [transforms.ToTensor(), transforms.Normalize((0.1307,), (0.3081,))]
+            [
+                transforms.Resize(size=(size, size)),
+                transforms.ToTensor(),
+                transforms.Normalize((0.5,), (0.5,)),
+            ]
         )
 
         self.data_train: Optional[Dataset] = None
@@ -120,12 +126,18 @@ class MNISTDataModule(LightningDataModule):
                 raise RuntimeError(
                     f"Batch size ({self.hparams.batch_size}) is not divisible by the number of devices ({self.trainer.world_size})."
                 )
-            self.batch_size_per_device = self.hparams.batch_size // self.trainer.world_size
+            self.batch_size_per_device = (
+                self.hparams.batch_size // self.trainer.world_size
+            )
 
         # load and split datasets only if not loaded already
         if not self.data_train and not self.data_val and not self.data_test:
-            trainset = MNIST(self.hparams.data_dir, train=True, transform=self.transforms)
-            testset = MNIST(self.hparams.data_dir, train=False, transform=self.transforms)
+            trainset = MNIST(
+                self.hparams.data_dir, train=True, transform=self.transforms
+            )
+            testset = MNIST(
+                self.hparams.data_dir, train=False, transform=self.transforms
+            )
             dataset = ConcatDataset(datasets=[trainset, testset])
             self.data_train, self.data_val, self.data_test = random_split(
                 dataset=dataset,
@@ -196,6 +208,39 @@ class MNISTDataModule(LightningDataModule):
         """
         pass
 
+def show(dataloader:DataLoader,num_samples: int = 5) -> None:
+    """Display a few random images from the CIFAR-10 dataset."""
+    # Select a random batch of images
+    data_iter = iter(dataloader)
+    images, labels = next(data_iter)
+
+    # Convert the images from Tensor to NumPy for displaying
+    images = images[:num_samples]  # Limit the number of samples to show
+    labels = labels[:num_samples]
+
+    # Convert the images to the original format for display
+    images = images / 2 + 0.5  # Undo normalization
+    images = images.permute(0, 2, 3, 1)  # Change shape from (N, C, H, W) to (N, H, W, C)
+
+    # Create a plot with the images
+    fig, axes = plt.subplots(1, num_samples, figsize=(12, 6))
+    for i in range(num_samples):
+        ax = axes[i]
+        ax.imshow(images[i].numpy())
+        ax.set_title(f"Label: {labels[i].item()}")
+        ax.axis('off')
+
+    plt.tight_layout()
+    plt.savefig("mnist.png")
+
+    plt.close()
 
 if __name__ == "__main__":
-    _ = MNISTDataModule()
+    data_module = MNISTDataModule()
+
+    # Prepare data and setup
+    data_module.prepare_data()
+    data_module.setup()
+
+    # Show some random CIFAR-10 images
+    show(data_module.train_dataloader(),num_samples=5)

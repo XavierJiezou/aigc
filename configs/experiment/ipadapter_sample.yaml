@@ -1,0 +1,38 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: mmcelebahq
+  - override /model: ipadapter
+  - override /callbacks: default
+  - override /trainer: gpu
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["celebahq", "ipadapter_sample"]
+
+seed: 42
+
+model:
+  diffusion_schedule:
+    _target_: diffusers.PNDMScheduler
+    beta_end: 0.012
+    beta_schedule: scaled_linear
+    beta_start: 0.00085
+    num_train_timesteps: 1000
+    set_alpha_to_one: false
+    skip_prk_steps: true
+    steps_offset: 1
+    trained_betas: null
+    # clip_sample: false
+    prediction_type: sample
+
+logger:
+  wandb:
+    tags: ${tags}
+    group: "ipadapter_sample"
+  aim:
+    experiment: "ipadapter_sample"

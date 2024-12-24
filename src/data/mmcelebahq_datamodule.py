@@ -112,6 +112,9 @@ class MMCelebAHQDataModule(LightningDataModule):
 
     def collate_fn(self, examples):
         input_ids = [example["instance_prompt_ids"] for example in examples]
+        raw_masks = [example["mask"] for example in examples]
+
+        raw_masks = torch.stack(raw_masks).squeeze(dim=1)
 
         input_ids = torch.cat(input_ids,dim=0)
         pixel_values = [example["instance_images"] for example in examples]
@@ -126,6 +129,7 @@ class MMCelebAHQDataModule(LightningDataModule):
             "instance_images": pixel_values,
             "drop_image_embeds": drop_image_embeds,
             "clip_images": clip_images,
+            "mask":raw_masks,
         }
         return batch
 
@@ -262,4 +266,9 @@ def show_mmcelebahq_dataloader():
 
 
 if __name__ == "__main__":
-    show_mmcelebahq_dataloader()
+    # show_mmcelebahq_dataloader()
+    dataloader = MMCelebAHQDataModule()
+    dataloader.setup()
+    for batch in dataloader.train_dataloader():
+        print(batch['mask'].shape)
+        break

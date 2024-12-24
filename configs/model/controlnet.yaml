@@ -17,8 +17,13 @@ lr_scheduler: constant
 unet: checkpoints/stablev15
 vae: checkpoints/stablev15
 text_encoder: checkpoints/stablev15
-froze_components: ["vae","text_encoder","unet"]
+froze_components: ["vae","text_encoder","unet","face_seg","net_clip"]
 controlnet: null
+loss_type: ["mask_loss","text_loss"]
+face_seg:
+  _target_: facer.face_parsing.FaRLFaceParser
+  conf_name: farl/celebm/448
+  model_path: checkpoints/face/face_parsing.farl.celebm.main_ema_181500_jit.pt
 diffusion_schedule: checkpoints/stablev15
 # compile model for faster training with pytorch 2.0
 compile: false

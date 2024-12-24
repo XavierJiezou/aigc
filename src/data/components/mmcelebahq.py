@@ -50,6 +50,12 @@ class MMCelebAHQ(Dataset):
                 transforms.Normalize([0.5], [0.5]),
             ]
         )
+        self.mask_transforms = transforms.Compose([
+            transforms.Resize(size),
+            transforms.CenterCrop(size),
+            transforms.ToTensor(),
+            transforms.Lambda(lambd=lambda x:x.long())
+        ])
 
     def get_filenames(self, split, face_file=None, mask_file=None, text_file=None):
         filenames = None
@@ -137,6 +143,8 @@ class MMCelebAHQ(Dataset):
             mask = self.mask_file[mask_name]
         else:
             mask = self.get_mask(index)
+        
+        raw_mask = self.mask_transforms(mask)
 
         if self.text_file is not None:
             text_name = f"{index}.jpg"
@@ -170,6 +178,7 @@ class MMCelebAHQ(Dataset):
         ).input_ids
         example["clip_image"] = clip_image
         example["drop_image_embed"] = drop_image_embed
+        example['mask'] = raw_mask
         return example
 
 
@@ -241,7 +250,7 @@ def show_mmcelebahq():
 
 
 if __name__ == "__main__":
-    show_mmcelebahq()
+    # show_mmcelebahq()
 
     # Length test
     assert len(MMCelebAHQ(split="train")) == 27000
@@ -253,4 +262,5 @@ if __name__ == "__main__":
     assert data["instance_images"].shape == (3, 512, 512)
     assert data['clip_image'].shape == (1,3,224,224)
     assert data['instance_prompt_ids'].shape == (1,77)
+    print(data['mask'].shape,data['mask'].dtype)
 

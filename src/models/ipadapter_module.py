@@ -1,10 +1,11 @@
-from typing import Any, Dict, Tuple
+from typing import Any, Dict, Tuple,List
 from diffusers import (
     UNet2DConditionModel,
     DDPMScheduler,
     AutoencoderKL,
 )
 import torch
+import clip
 from torch import nn as nn
 import torch.nn.functional as F
 from lightning import LightningModule
@@ -13,6 +14,7 @@ from transformers import CLIPTextModel, CLIPVisionModelWithProjection
 from src.models.components.image_proj_model import ImageProjModel
 from diffusers.optimization import get_scheduler
 from src.models.components.attention import CrossAttention
+from facer.face_parsing import FaRLFaceParser
 
 class IPAdapterLitModule(LightningModule):
     def __init__(
@@ -27,6 +29,8 @@ class IPAdapterLitModule(LightningModule):
         image_proj_model: ImageProjModel,
         text_mask_attn: CrossAttention,
         mask_text_attn: CrossAttention,
+        face_seg: FaRLFaceParser | None = None,
+        loss_type: List[str] = [],
         lr_num_cycles=1,
         lr_power=1.0,
         froze_components=["vae", "text_encoder"],
@@ -57,6 +61,8 @@ class IPAdapterLitModule(LightningModule):
         self.image_proj_model = image_proj_model
         self.text_mask_attn = text_mask_attn
         self.mask_text_attn = mask_text_attn
+        self.face_seg = face_seg
+        self.net_clip = clip.load("checkpoints/clip/ViT-B-32.pt")[0]
 
         if isinstance(unet, str):
             self.unet = UNet2DConditionModel.from_pretrained(unet, subfolder="unet")
@@ -96,6 +102,22 @@ class IPAdapterLitModule(LightningModule):
 
         encoder_hidden_states = torch.cat([mask_text,text_mask],dim=1)  # [bs,81,768]
         return encoder_hidden_states
+    
+    def calculate_loss(
+        self, pred_image: torch.Tensor, mask: torch.Tensor, caption_tokens: torch.Tensor
+    ):
+        total_loss = 0
+        if "mask_loss" in self.hparams.loss_type:
+            mask = mask.long()
+            total_loss += F.cross_entropy(self.face_seg.net(pred_image)[0], mask)
+        if "text_loss" in self.hparams.loss_type:
+            x_tgt_pred_renorm = pred_image * 0.5 + 0.5
+            x_tgt_pred_renorm = F.interpolate(
+                x_tgt_pred_renorm, (224, 224), mode="bilinear", align_corners=False
+            )
+            clipsim, _ = self.net_clip(x_tgt_pred_renorm, caption_tokens)
+            total_loss += 1 - clipsim.mean() / 100
+        return total_loss
 
 
     def froze(self):
@@ -178,12 +200,20 @@ class IPAdapterLitModule(LightningModule):
             target = noise
         elif self.diffusion_schedule.config.prediction_type == "v_prediction":
             target = self.diffusion_schedule.get_velocity(latents, noise, timesteps)
+        elif self.diffusion_schedule.config.prediction_type == "sample":
+            target = latents
         else:
             raise ValueError(
                 f"Unknown prediction type {self.diffusion_schedule.config.prediction_type}"
             )
-        loss = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
-        return loss
+        output_image = (
+            self.vae.decode(latents / self.vae.config.scaling_factor).sample
+        ).clamp(-1, 1)
+
+        mse_loss = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
+        total_loss = self.calculate_loss(output_image,batch['mask'],batch['instance_prompt_ids'])
+        total_loss += mse_loss
+        return total_loss
 
     def training_step(
         self, batch: Tuple[torch.Tensor, torch.Tensor], batch_idx: int

@@ -15,6 +15,7 @@ from PIL import Image
 from transformers import CLIPImageProcessor
 from matplotlib import pyplot as plt
 import numpy as np
+from diffusers import DPMSolverMultistepScheduler
 from src.models.ipadapter_module import IPAdapterLitModule
 
 
@@ -190,6 +191,7 @@ def get_args():
     )
     parser.add_argument("--tmp_dir", type=str, default="tmp")
     parser.add_argument("--duration", type=int, default=1)
+    parser.add_argument("--sample", action="store_true")
     args = parser.parse_args()
     return args
 
@@ -198,7 +200,12 @@ def get_pipeline(args):
     ckpt = torch.load(args.ckpt_path, map_location="cpu")
     model_config = OmegaConf.load(args.model_config)  # 加载model config file
     model: IPAdapterLitModule = hydra.utils.instantiate(model_config)
-    model.load_state_dict(ckpt["state_dict"])
+    state_dict = {}
+    for k,v in ckpt["state_dict"].items():
+        if k[:8] == "face_seg":
+            continue
+        state_dict[k] = v
+    model.load_state_dict(state_dict)
     model.to(args.device)
     model.eval()
     tokenizer = CLIPTokenizer.from_pretrained(
@@ -208,13 +215,22 @@ def get_pipeline(args):
     feature_extractor = CLIPFeatureExtractor.from_pretrained(
         "checkpoints/stablev15", subfolder="feature_extractor"
     )
+    scheduler = model.diffusion_schedule
+    if args.sample:
+        scheduler = DPMSolverMultistepScheduler(
+            beta_end=0.012,
+            beta_schedule="scaled_linear",
+            beta_start=0.00085,
+            num_train_timesteps=1000,
+            prediction_type="sample",
+        )
     pipeline = StableDiffusionPipeline(
         vae=model.vae,
         text_encoder=model.text_encoder,
         unet=model.unet,
         feature_extractor=feature_extractor,
         tokenizer=tokenizer,
-        scheduler=model.diffusion_schedule,
+        scheduler=scheduler,
         safety_checker=None,
     ).to(args.device)
     # pipeline.unet = torch.compile(pipeline.unet, mode="reduce-overhead", fullgraph=True)

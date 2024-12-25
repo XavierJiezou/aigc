@@ -34,6 +34,7 @@ class IPAdapterLitModule(LightningModule):
         lr_num_cycles=1,
         lr_power=1.0,
         froze_components=["vae", "text_encoder"],
+        set_timesteps=1,
         compile: bool = False,
     ) -> None:
         super().__init__()
@@ -63,6 +64,7 @@ class IPAdapterLitModule(LightningModule):
         self.mask_text_attn = mask_text_attn
         self.face_seg = face_seg
         self.net_clip = clip.load("checkpoints/clip/ViT-B-32.pt")[0]
+        self.timesteps = torch.tensor([999]).long()
 
         if isinstance(unet, str):
             self.unet = UNet2DConditionModel.from_pretrained(unet, subfolder="unet")
@@ -83,6 +85,8 @@ class IPAdapterLitModule(LightningModule):
             self.image_encoder = CLIPVisionModelWithProjection.from_pretrained(
                 image_encoder
             )
+        if set_timesteps > 0:
+            self.diffusion_schedule.set_timesteps(set_timesteps)
 
         # loss function
         self.criterion = torch.nn.CrossEntropyLoss()
@@ -157,12 +161,12 @@ class IPAdapterLitModule(LightningModule):
         bs = latents.shape[0]
 
         # Sample a random timestep for each image
-        timesteps = torch.randint(
-            0,
-            self.diffusion_schedule.config.num_train_timesteps,
-            (bs,),
-            device=latents.device,
-        ).long()
+        # timesteps = torch.randint(
+        #     0,
+        #     self.diffusion_schedule.config.num_train_timesteps,
+        #     (bs,),
+        #     device=latents.device,
+        # ).long()
 
         # Add noise to the latents according to the noise magnitude at each timestep
         # (this is the forward diffusion process)
@@ -200,8 +204,6 @@ class IPAdapterLitModule(LightningModule):
             target = noise
         elif self.diffusion_schedule.config.prediction_type == "v_prediction":
             target = self.diffusion_schedule.get_velocity(latents, noise, timesteps)
-        elif self.diffusion_schedule.config.prediction_type == "sample":
-            target = latents
         else:
             raise ValueError(
                 f"Unknown prediction type {self.diffusion_schedule.config.prediction_type}"

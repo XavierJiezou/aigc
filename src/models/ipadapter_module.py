@@ -1,4 +1,4 @@
-from typing import Any, Dict, Tuple,List
+from typing import Any, Dict, Tuple, List
 from diffusers import (
     UNet2DConditionModel,
     DDPMScheduler,
@@ -16,6 +16,7 @@ from diffusers.optimization import get_scheduler
 from src.models.components.attention import CrossAttention
 from facer.face_parsing import FaRLFaceParser
 
+
 class IPAdapterLitModule(LightningModule):
     def __init__(
         self,
@@ -30,7 +31,7 @@ class IPAdapterLitModule(LightningModule):
         text_mask_attn: CrossAttention,
         mask_text_attn: CrossAttention,
         face_seg: FaRLFaceParser | None = None,
-        loss_type: List[str] = [],
+        loss_type: List[str] = ["mse_loss"],
         lr_num_cycles=1,
         lr_power=1.0,
         froze_components=["vae", "text_encoder"],
@@ -88,9 +89,6 @@ class IPAdapterLitModule(LightningModule):
         if set_timesteps > 0:
             self.diffusion_schedule.set_timesteps(set_timesteps)
 
-        # loss function
-        self.criterion = torch.nn.CrossEntropyLoss()
-
         # for averaging loss across batches
         self.train_loss = MeanMetric()
         self.val_loss = MeanMetric()
@@ -100,17 +98,30 @@ class IPAdapterLitModule(LightningModule):
         self.val_acc_best = MaxMetric()
         self.froze()
 
-    def do_mask_text_attn(self,mask_features:torch.Tensor,text_features:torch.Tensor): 
-        mask_text = self.mask_text_attn.forward(x=mask_features,context=text_features) # [bs,4,768] -> [bs,4,768]
-        text_mask = self.text_mask_attn.forward(x=text_features,context=mask_features) # [bs,77,768] -> [bs,77,768]
+    def do_mask_text_attn(
+        self, mask_features: torch.Tensor, text_features: torch.Tensor
+    ):
+        # print(mask_features.shape,text_features.shape)
+        mask_text = self.mask_text_attn.forward(
+            x=mask_features, context=text_features
+        )  # [bs,4,768] -> [bs,4,768]
+        text_mask = self.text_mask_attn.forward(
+            x=text_features, context=mask_features
+        )  # [bs,77,768] -> [bs,77,768]
 
-        encoder_hidden_states = torch.cat([mask_text,text_mask],dim=1)  # [bs,81,768]
+        encoder_hidden_states = torch.cat([mask_text, text_mask], dim=1)  # [bs,81,768]
         return encoder_hidden_states
-    
+
     def calculate_loss(
-        self, pred_image: torch.Tensor, mask: torch.Tensor, caption_tokens: torch.Tensor
+        self,
+        groud_true: torch.Tensor,
+        pred_image: torch.Tensor,
+        mask: torch.Tensor,
+        caption_tokens: torch.Tensor,
     ):
         total_loss = 0
+        if "mse_loss" in self.hparams.loss_type:
+            total_loss += F.mse_loss(pred_image.float(), groud_true.float(), reduction="mean")
         if "mask_loss" in self.hparams.loss_type:
             mask = mask.long()
             total_loss += F.cross_entropy(self.face_seg.net(pred_image)[0], mask)
@@ -122,7 +133,6 @@ class IPAdapterLitModule(LightningModule):
             clipsim, _ = self.net_clip(x_tgt_pred_renorm, caption_tokens)
             total_loss += 1 - clipsim.mean() / 100
         return total_loss
-
 
     def froze(self):
         for component in self.hparams.froze_components:
@@ -157,8 +167,8 @@ class IPAdapterLitModule(LightningModule):
             latents = latents * self.vae.config.scaling_factor
 
         # Sample noise that we'll add to the latents
-        noise = torch.randn_like(latents)
-        bs = latents.shape[0]
+        # noise = torch.randn_like(latents)
+        # bs = latents.shape[0]
 
         # Sample a random timestep for each image
         # timesteps = torch.randint(
@@ -170,51 +180,67 @@ class IPAdapterLitModule(LightningModule):
 
         # Add noise to the latents according to the noise magnitude at each timestep
         # (this is the forward diffusion process)
-        noised_latents = self.diffusion_schedule.add_noise(latents, noise, timesteps)
+        # noised_latents = self.diffusion_schedule.add_noise(latents, noise, timesteps)
 
         # Get the text embedding for conditioning
         with torch.no_grad():
             text_features = self.text_encoder(batch["instance_prompt_ids"])[
                 0
-            ]  # encoder_hidden_states shape : bs 77 768
+            ]  # encoder_hidden_states shape : bs 77 1024
 
         with torch.no_grad():
-            image_embeds = self.image_encoder(batch["clip_images"]).image_embeds # [bs,768]
-        
+            image_embeds = self.image_encoder(
+                batch["clip_images"]
+            ).image_embeds  # [bs,768]
+
         image_embeds_ = []
-        for image_embed ,drop_image_embed in zip(image_embeds,batch["drop_image_embeds"]):
+        for image_embed, drop_image_embed in zip(
+            image_embeds, batch["drop_image_embeds"]
+        ):
             if drop_image_embed == 1:
                 image_embeds_.append(torch.zeros_like(image_embed))
             else:
                 image_embeds_.append(image_embed)
         image_embeds = torch.stack(image_embeds_)
         image_features = self.image_proj_model.forward(image_embeds)
-        encoder_hidden_states = self.do_mask_text_attn(mask_features=image_features,text_features=text_features)
+        encoder_hidden_states = self.do_mask_text_attn(
+            mask_features=image_features, text_features=text_features
+        )
 
-
+        if self.timesteps.device != latents.device:
+            self.timesteps = self.timesteps.to(latents.device)
         # Predict the noise residual
         noise_pred = self.unet.forward(
-            noised_latents,
-            timesteps,
+            latents,
+            self.timesteps,
             encoder_hidden_states,
             return_dict=False,
         )[0]
         # Get the target for loss depending on the prediction type
-        if self.diffusion_schedule.config.prediction_type == "epsilon":
-            target = noise
-        elif self.diffusion_schedule.config.prediction_type == "v_prediction":
-            target = self.diffusion_schedule.get_velocity(latents, noise, timesteps)
-        else:
-            raise ValueError(
-                f"Unknown prediction type {self.diffusion_schedule.config.prediction_type}"
-            )
+        # if self.diffusion_schedule.config.prediction_type == "epsilon":
+        #     target = noise
+        # elif self.diffusion_schedule.config.prediction_type == "v_prediction":
+        #     target = self.diffusion_schedule.get_velocity(
+        #         latents, noise, self.timesteps
+        #     )
+        # else:
+        #     raise ValueError(
+        #         f"Unknown prediction type {self.diffusion_schedule.config.prediction_type}"
+        #     )
+        if self.diffusion_schedule.alphas_cumprod.device != latents.device:
+            self.diffusion_schedule.alphas_cumprod = self.diffusion_schedule.alphas_cumprod.to(latents.device)
+        x_denoised = self.diffusion_schedule.step(
+            noise_pred, self.timesteps, latents, return_dict=True
+        ).prev_sample
         output_image = (
-            self.vae.decode(latents / self.vae.config.scaling_factor).sample
+            self.vae.decode(x_denoised / self.vae.config.scaling_factor).sample
         ).clamp(-1, 1)
-
-        mse_loss = F.mse_loss(noise_pred.float(), target.float(), reduction="mean")
-        total_loss = self.calculate_loss(output_image,batch['mask'],batch['instance_prompt_ids'])
-        total_loss += mse_loss
+        total_loss = self.calculate_loss(
+            batch["instance_images"],
+            output_image,
+            batch["mask"],
+            batch["instance_prompt_ids"],
+        )
         return total_loss
 
     def training_step(

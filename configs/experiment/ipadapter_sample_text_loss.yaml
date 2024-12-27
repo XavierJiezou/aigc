@@ -12,13 +12,17 @@ defaults:
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["celebahq", "ipadapter_sample"]
+tags: ["celebahq", "ipadapter_sample_text_loss"]
 
 seed: 42
+
+model:
+  froze_components: ["vae","text_encoder","unet","image_encoder","net_clip"]
+  loss_type: ["mse_loss","text_loss"]
 
 logger:
   wandb:
     tags: ${tags}
-    group: "ipadapter_sample"
+    group: "ipadapter_sample_text_loss"
   aim:
-    experiment: "ipadapter_sample"
+    experiment: "ipadapter_sample_text_loss"

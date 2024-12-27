@@ -7,6 +7,7 @@ size: 512
 t_drop_rate: 0.05
 i_drop_rate: 0.05
 ti_drop_rate: 0.05
+tokenizer_id: checkpoints/sd_turbo
 batch_size: 8
 num_workers: 4
 pin_memory: true

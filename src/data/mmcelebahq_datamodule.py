@@ -22,6 +22,7 @@ class MMCelebAHQDataModule(LightningDataModule):
         t_drop_rate=0.05,
         i_drop_rate=0.05,
         ti_drop_rate=0.05,
+        tokenizer_id="checkpoints/sd_turbo",
         pin_memory: bool = True,
     ) -> None:
         """Initialize a `MNISTDataModule`."""
@@ -59,6 +60,7 @@ class MMCelebAHQDataModule(LightningDataModule):
             t_drop_rate=self.hparams.t_drop_rate,
             i_drop_rate=self.hparams.i_drop_rate,
             ti_drop_rate=self.hparams.ti_drop_rate,
+            tokenizer_id=self.hparams.tokenizer_id,
         )
 
         MMCelebAHQ(
@@ -71,6 +73,7 @@ class MMCelebAHQDataModule(LightningDataModule):
             t_drop_rate=self.hparams.t_drop_rate,
             i_drop_rate=self.hparams.i_drop_rate,
             ti_drop_rate=self.hparams.ti_drop_rate,
+            tokenizer_id=self.hparams.tokenizer_id,
         )
 
     def setup(self, stage: Optional[str] = None) -> None:
@@ -96,6 +99,7 @@ class MMCelebAHQDataModule(LightningDataModule):
                 t_drop_rate=self.hparams.t_drop_rate,
                 i_drop_rate=self.hparams.i_drop_rate,
                 ti_drop_rate=self.hparams.ti_drop_rate,
+                tokenizer_id=self.hparams.tokenizer_id,
             )
 
             self.val_dataset = self.test_dataset = MMCelebAHQ(
@@ -108,6 +112,7 @@ class MMCelebAHQDataModule(LightningDataModule):
                 t_drop_rate=self.hparams.t_drop_rate,
                 i_drop_rate=self.hparams.i_drop_rate,
                 ti_drop_rate=self.hparams.ti_drop_rate,
+                tokenizer_id=self.hparams.tokenizer_id,
             )
 
     def collate_fn(self, examples):

@@ -24,6 +24,7 @@ class MMCelebAHQ(Dataset):
         t_drop_rate=0.05,
         i_drop_rate=0.05,
         ti_drop_rate=0.05,
+        tokenizer_id="checkpoints/sd_turbo",
     ):
 
         self.root = root
@@ -39,7 +40,7 @@ class MMCelebAHQ(Dataset):
 
         self.filenames = self.get_filenames(split, face_file, mask_file, text_file)
         self.tokenizer = CLIPTokenizer.from_pretrained(
-            "checkpoints/stablev15",
+            tokenizer_id,
             subfolder="tokenizer",
         )
         self.transforms = transforms.Compose(
@@ -184,7 +185,7 @@ class MMCelebAHQ(Dataset):
 
 def show_mmcelebahq():
     tokenizer = CLIPTokenizer.from_pretrained(
-        "checkpoints/stablev15",
+        "checkpoints/sd_turbo",
         subfolder="tokenizer",
     )
     dataset = MMCelebAHQ(split="val")

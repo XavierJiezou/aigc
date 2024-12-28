@@ -1,0 +1,18 @@
+_target_: src.models.clip_module.CLIPWrapper
+
+clip_config:
+  name: ViT-B/16
+  download_root: checkpoints/clip
+  device: cuda
+face_state_dict: checkpoints/farl/FaRL-Base-Patch16-LAIONFace20M-ep64.pth
+minibatch_size: 4
+mask_encoder:
+  _target_: src.models.components.mask_encoder.MaskEncoder
+  num_embeddings: 19
+  embedding_dim: 3
+  image_resolution: 224
+  vision_patch_size: 16
+  vision_width: 768
+  vision_layers: 12
+  embed_dim: 512
+num_training_steps: 337500   # 27000 / bs=3375 * 100

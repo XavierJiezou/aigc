@@ -119,14 +119,14 @@ class IPAdapterLitModule(LightningModule):
         mask: torch.Tensor,
         caption_tokens: torch.Tensor,
     ):
+        x_tgt_pred_renorm = pred_image * 0.5 + 0.5
         total_loss = 0
         if "mse_loss" in self.hparams.loss_type:
             total_loss += F.mse_loss(pred_image.float(), groud_true.float(), reduction="mean")
         if "mask_loss" in self.hparams.loss_type:
             mask = mask.long()
-            total_loss += F.cross_entropy(self.face_seg.net(pred_image)[0], mask)
+            total_loss += F.cross_entropy(self.face_seg.net(x_tgt_pred_renorm)[0], mask)
         if "text_loss" in self.hparams.loss_type:
-            x_tgt_pred_renorm = pred_image * 0.5 + 0.5
             x_tgt_pred_renorm = F.interpolate(
                 x_tgt_pred_renorm, (224, 224), mode="bilinear", align_corners=False
             )

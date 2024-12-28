@@ -191,7 +191,6 @@ def get_args():
     )
     parser.add_argument("--tmp_dir", type=str, default="tmp")
     parser.add_argument("--duration", type=int, default=1)
-    parser.add_argument("--sample", action="store_true")
     args = parser.parse_args()
     return args
 
@@ -216,14 +215,6 @@ def get_pipeline(args):
         "checkpoints/stablev15", subfolder="feature_extractor"
     )
     scheduler = model.diffusion_schedule
-    if args.sample:
-        scheduler = DPMSolverMultistepScheduler(
-            beta_end=0.012,
-            beta_schedule="scaled_linear",
-            beta_start=0.00085,
-            num_train_timesteps=1000,
-            prediction_type="sample",
-        )
     pipeline = StableDiffusionPipeline(
         vae=model.vae,
         text_encoder=model.text_encoder,

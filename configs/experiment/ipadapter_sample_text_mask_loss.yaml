@@ -17,11 +17,6 @@ tags: ["celebahq", "ipadapter_sample_text_mask_loss"]
 seed: 42
 
 model:
-  face_seg:
-    _target_: facer.face_parsing.FaRLFaceParser
-    conf_name: farl/celebm/448
-    model_path: checkpoints/face/face_parsing.farl.celebm.main_ema_181500_jit.pt
-  froze_components: ["vae","text_encoder","unet","image_encoder","face_seg","net_clip"]
   loss_type: ["mse_loss","mask_loss","text_loss"]
 
 logger:

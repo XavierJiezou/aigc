@@ -15,7 +15,7 @@ optimizer:
 image_proj_model:
   _target_: src.models.components.image_proj_model.ImageProjModel
   cross_attention_dim: 1024
-  clip_embeddings_dim: 768
+  clip_embeddings_dim: 512
   clip_extra_context_tokens: 4
 
 text_mask_attn:
@@ -35,9 +35,22 @@ lr_scheduler: constant
 unet: checkpoints/sd_turbo
 vae: checkpoints/sd_turbo
 text_encoder: checkpoints/sd_turbo
-image_encoder: checkpoints/clip_large_patch14
-froze_components: ["vae","text_encoder","unet","image_encoder"]
+face_seg:
+  _target_: facer.face_parsing.FaRLFaceParser
+  conf_name: farl/celebm/448
+  model_path: checkpoints/face/face_parsing.farl.celebm.main_ema_181500_jit.pt
 diffusion_schedule: checkpoints/sd_turbo
+mask_encoder:
+  _target_: src.models.components.mask_encoder.MaskEncoder
+  num_embeddings: 19
+  embedding_dim: 3
+  image_resolution: 224
+  vision_patch_size: 16
+  vision_width: 768
+  vision_layers: 12
+  embed_dim: 512
+mask_encoder_weight_path: logs/train/runs/mask_clip/2024-12-29_00-24-22/checkpoints/epoch=031-val_loss=0.0398.ckpt
+froze_components: ["vae","text_encoder","unet","net_clip","face_seg","mask_encoder"]
 loss_type: ["mse_loss"]
 # compile model for faster training with pytorch 2.0
 compile: false

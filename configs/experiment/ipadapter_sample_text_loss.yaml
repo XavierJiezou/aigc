@@ -17,7 +17,6 @@ tags: ["celebahq", "ipadapter_sample_text_loss"]
 seed: 42
 
 model:
-  froze_components: ["vae","text_encoder","unet","image_encoder","net_clip"]
   loss_type: ["mse_loss","text_loss"]
 
 logger:

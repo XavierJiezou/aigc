@@ -15,6 +15,7 @@ from src.models.components.image_proj_model import ImageProjModel
 from diffusers.optimization import get_scheduler
 from src.models.components.attention import CrossAttention
 from facer.face_parsing import FaRLFaceParser
+from src.models.components.mask_encoder import MaskEncoder
 
 
 class IPAdapterLitModule(LightningModule):
@@ -26,10 +27,11 @@ class IPAdapterLitModule(LightningModule):
         lr_scheduler: str,
         text_encoder: CLIPTextModel | str,
         vae: AutoencoderKL | str,
-        image_encoder: CLIPVisionModelWithProjection | str,
+        mask_encoder: MaskEncoder | str,
         image_proj_model: ImageProjModel,
         text_mask_attn: CrossAttention,
         mask_text_attn: CrossAttention,
+        mask_encoder_weight_path:str,
         face_seg: FaRLFaceParser | None = None,
         loss_type: List[str] = ["mse_loss"],
         lr_num_cycles=1,
@@ -49,17 +51,18 @@ class IPAdapterLitModule(LightningModule):
                 "diffusion_schedule",
                 "text_encoder",
                 "vae",
-                "image_encoder",
+                "mask_encoder",
                 "image_proj_model",
                 "text_mask_attn",
                 "mask_text_attn",
+                "face_seg"
             ],
         )
         self.unet = unet
         self.vae = vae
         self.text_encoder = text_encoder
         self.diffusion_schedule = diffusion_schedule
-        self.image_encoder = image_encoder
+        self.mask_encoder = mask_encoder
         self.image_proj_model = image_proj_model
         self.text_mask_attn = text_mask_attn
         self.mask_text_attn = mask_text_attn
@@ -82,10 +85,6 @@ class IPAdapterLitModule(LightningModule):
             self.diffusion_schedule = DDPMScheduler.from_pretrained(
                 diffusion_schedule, subfolder="scheduler"
             )
-        if isinstance(image_encoder, str):
-            self.image_encoder = CLIPVisionModelWithProjection.from_pretrained(
-                image_encoder
-            )
         if set_timesteps > 0:
             self.diffusion_schedule.set_timesteps(set_timesteps)
 
@@ -96,7 +95,18 @@ class IPAdapterLitModule(LightningModule):
 
         # for tracking best so far validation accuracy
         self.val_acc_best = MaxMetric()
+        self.load_mask_encoder_weight(weight_path=mask_encoder_weight_path)
         self.froze()
+    
+    def load_mask_encoder_weight(self,weight_path):
+        ckpt:Dict = torch.load(weight_path)['state_dict']
+        state_dict = {}
+        for k,v in ckpt.items():
+            if k[:13] == "mask_encoder.":
+                new_k = k[13:]
+                state_dict[new_k] = v
+        self.mask_encoder.load_state_dict(state_dict,strict=True)
+
 
     def do_mask_text_attn(
         self, mask_features: torch.Tensor, text_features: torch.Tensor
@@ -189,9 +199,7 @@ class IPAdapterLitModule(LightningModule):
             ]  # encoder_hidden_states shape : bs 77 1024
 
         with torch.no_grad():
-            image_embeds = self.image_encoder(
-                batch["clip_images"]
-            ).image_embeds  # [bs,768]
+            image_embeds = self.mask_encoder.forward(batch["mask"])  # [bs,512]
 
         image_embeds_ = []
         for image_embed, drop_image_embed in zip(

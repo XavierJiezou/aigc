@@ -41,16 +41,15 @@ class MaskEncoder(nn.Module):
         mask_feature = self.visual(mask)
         return mask_feature
     
-    def init_visual(self,checkpoint:str | dict):
-        if isinstance(checkpoint,str):
-            checkpoint = torch.load(checkpoint)['state_dict']
+    def init_visual(self,clip:nn.Module):
         visual_state_dict = {}
-        for k,v in checkpoint.items():
-            new_k:str = k
+        clip.named_parameters
+        for name,v in clip.named_parameters():
+            new_k:str = name
             if new_k[:7] == "visual.":
                 new_k = new_k[7:]
                 visual_state_dict[new_k] = v
-        self.visual.load_state_dict(visual_state_dict,strict=False)
+        self.visual.load_state_dict(visual_state_dict,strict=True)
 
 if __name__ == "__main__":
     model = MaskEncoder()

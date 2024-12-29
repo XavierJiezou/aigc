@@ -20,7 +20,6 @@ class CLIPWrapper(LightningModule):
         self,
         clip_config: dict,
         minibatch_size: int,
-        face_state_dict: str,
         num_training_steps:int,
         mask_encoder: MaskEncoder = None,
     ):
@@ -33,11 +32,11 @@ class CLIPWrapper(LightningModule):
         super().__init__()
         self.clip_config = clip_config
         self.clip, _ = clip.load(**clip_config)
-        farl_state=torch.load(face_state_dict)
-        self.clip.load_state_dict(farl_state["state_dict"],strict=False)
+        # farl_state=torch.load(face_state_dict)
+        # self.clip.load_state_dict(farl_state["state_dict"],strict=False)
         self.minibatch_size = minibatch_size
         self.mask_encoder = mask_encoder
-        self.mask_encoder.init_visual(farl_state)
+        self.mask_encoder.init_visual(copy.deepcopy(self.clip))
         self.num_training_steps = num_training_steps
 
         self.automatic_optimization = False
@@ -62,6 +61,7 @@ class CLIPWrapper(LightningModule):
         mask = train_batch["mask"].long()
 
         n = math.ceil(len(image) // self.minibatch_size)
+        n = max(n,1)
         image_mbs = torch.chunk(image, n)
         mask_mbs = torch.chunk(mask, n)
 
@@ -98,6 +98,7 @@ class CLIPWrapper(LightningModule):
                     "train_acc": (acc_i + acc_t) / 2 / len(image) / len(ims),
                 },
                 prog_bar=True,
+                sync_dist=True,
             )
 
         if isinstance(optimizer, list):
@@ -148,6 +149,7 @@ class CLIPWrapper(LightningModule):
         mask = train_batch["mask"].long()
 
         n = math.ceil(len(image) // self.minibatch_size)
+        n = max(n,1)
         image_mbs = torch.chunk(image, n)
         mask_mbs = torch.chunk(mask, n)
 
@@ -184,6 +186,7 @@ class CLIPWrapper(LightningModule):
                     "val_acc": (acc_i + acc_t) / 2 / len(image) / len(ims),
                 },
                 prog_bar=True,
+                sync_dist=True
             )
 
     def configure_optimizers(self):
@@ -219,7 +222,7 @@ class CLIPWrapper(LightningModule):
             cycle_mult=1.0,
             max_lr=lr,
             min_lr=0,
-            warmup_steps=2000,
+            warmup_steps=1000,
         )
 
         return {"optimizer": optimizer, "lr_scheduler": lr_scheduler}

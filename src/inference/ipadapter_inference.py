@@ -15,6 +15,7 @@ from PIL import Image
 from transformers import CLIPImageProcessor
 from matplotlib import pyplot as plt
 import numpy as np
+from torchvision import transforms
 from diffusers import DPMSolverMultistepScheduler
 from src.models.ipadapter_module import IPAdapterLitModule
 
@@ -40,23 +41,25 @@ class IPAdapterPipeline:
         sd_pipeline: StableDiffusionPipeline,
         ipadapter: IPAdapterLitModule,
         device: str,
+        size=512,
     ):
         self.sd_pipeline = sd_pipeline
         self.ipadapter = ipadapter
         self.device = device
-        self.clip_image_processor = CLIPImageProcessor()
+        self.mask_transforms = transforms.Compose([
+            transforms.Resize(size),
+            transforms.CenterCrop(size),
+            transforms.ToTensor(),
+            transforms.Lambda(lambd=lambda x:x.long())
+        ])
 
     @torch.inference_mode()
     def get_image_embeds(self, pil_image=None, clip_image_embeds=None):
         if pil_image is not None:
             if isinstance(pil_image, Image.Image):
                 pil_image = [pil_image]
-            clip_image = self.clip_image_processor(
-                images=pil_image, return_tensors="pt"
-            ).pixel_values
-            clip_image_embeds = self.ipadapter.image_encoder(
-                clip_image.to(self.device)
-            ).image_embeds
+            clip_image = self.mask_transforms(pil_image[0])
+            clip_image_embeds = self.ipadapter.mask_encoder(clip_image.to(self.device))
         else:
             clip_image_embeds = clip_image_embeds.to(self.device)
         image_prompt_embeds = self.ipadapter.image_proj_model(clip_image_embeds)
@@ -167,7 +170,7 @@ def get_args():
     parser.add_argument(
         "--ckpt_path",
         type=str,
-        default="logs/train/runs/ipadapter/2024-12-18_21-30-54/checkpoints/epoch=002-val_loss=0.1439.ckpt",
+        default="logs/train/runs/ipadapter_sample/2024-12-29_16-49-14/checkpoints/last.ckpt",
     )
     parser.add_argument(
         "--model_config", type=str, default="configs/model/ipadapter.yaml"
@@ -199,12 +202,7 @@ def get_pipeline(args):
     ckpt = torch.load(args.ckpt_path, map_location="cpu")
     model_config = OmegaConf.load(args.model_config)  # 加载model config file
     model: IPAdapterLitModule = hydra.utils.instantiate(model_config)
-    state_dict = {}
-    for k,v in ckpt["state_dict"].items():
-        if k[:8] == "face_seg":
-            continue
-        state_dict[k] = v
-    model.load_state_dict(state_dict)
+    model.load_state_dict(ckpt["state_dict"])
     model.to(args.device)
     model.eval()
     tokenizer = CLIPTokenizer.from_pretrained(

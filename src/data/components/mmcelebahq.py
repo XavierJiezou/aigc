@@ -43,6 +43,16 @@ class MMCelebAHQ(Dataset):
             tokenizer_id,
             subfolder="tokenizer",
         )
+        # Original and new labels
+        self.org_labels = [
+            "background", "face", "nose", "eyeg", "le", "re", "lb", "rb", "lr", "rr",
+            "imouth", "ulip", "llip", "hair", "hat", "earr", "neck_l", "neck", "cloth"
+        ]
+
+        self.new_labels = [
+            "background", "neck", "face", "cloth", "rr", "lr", "rb", "lb", "re", "le",
+            "nose", "imouth", "llip", "ulip", "hair", "eyeg", "hat", "earr", "neck_l"
+        ]
         self.transforms = transforms.Compose(
             [
                 transforms.Resize(size),
@@ -57,6 +67,15 @@ class MMCelebAHQ(Dataset):
             transforms.ToTensor(),
             transforms.Lambda(lambd=lambda x:x.long())
         ])
+
+    def get_remapped_mask(self,mask:Image.Image | np.ndarray):
+        if isinstance(mask,Image.Image):
+            mask = np.array(mask)
+        remapped_mask = np.zeros_like(mask, dtype=np.uint8)
+        for i, pred_label in enumerate(self.new_labels):
+            if pred_label in self.org_labels:
+                remapped_mask[mask == i] = self.org_labels.index(pred_label)
+        return remapped_mask
 
     def get_filenames(self, split, face_file=None, mask_file=None, text_file=None):
         filenames = None
@@ -146,6 +165,7 @@ class MMCelebAHQ(Dataset):
             mask = self.get_mask(index)
         
         raw_mask = self.mask_transforms(mask)
+        remapped_mask = self.get_remapped_mask(mask)
 
         if self.text_file is not None:
             text_name = f"{index}.jpg"
@@ -180,6 +200,7 @@ class MMCelebAHQ(Dataset):
         example["clip_image"] = clip_image
         example["drop_image_embed"] = drop_image_embed
         example['mask'] = raw_mask
+        example['remapped_mask'] = remapped_mask
         return example
 
 

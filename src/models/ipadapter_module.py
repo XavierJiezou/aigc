@@ -238,7 +238,7 @@ class IPAdapterLitModule(LightningModule):
         total_loss = self.calculate_loss(
             batch["instance_images"],
             output_image,
-            batch["mask"],
+            batch["remapped_mask"],
             batch["instance_prompt_ids"],
         )
         return total_loss

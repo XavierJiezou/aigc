@@ -21,7 +21,7 @@ from src.models.components.attention_processor import (
     AttnProcessor2_0 as AttnProcessor,
     IPAttnProcessor2_0 as IPAttnProcessor,
 )
-from src.models.ipadapter_raw_module import IPAdapterRawLitModule
+from src.models.ipadapter_mask_spi_module import IPAdapterMaskSpiLitModule
 
 
 def get_generator(seed, device):
@@ -43,7 +43,7 @@ class IPAdapterPipeline:
     def __init__(
         self,
         sd_pipeline: StableDiffusionPipeline,
-        ipadapter: IPAdapterRawLitModule,
+        ipadapter: IPAdapterMaskSpiLitModule,
         device: str,
         size=512,
     ):
@@ -66,10 +66,8 @@ class IPAdapterPipeline:
             clip_image_embeds = self.ipadapter.mask_encoder(clip_image.to(self.device))
         else:
             clip_image_embeds = clip_image_embeds.to(self.device)
-        image_prompt_embeds = self.ipadapter.image_proj_model(clip_image_embeds)
-        uncond_image_prompt_embeds = self.ipadapter.image_proj_model(
-            torch.zeros_like(clip_image_embeds)
-        )
+        image_prompt_embeds = clip_image_embeds
+        uncond_image_prompt_embeds = torch.zeros_like(clip_image_embeds)
         return image_prompt_embeds, uncond_image_prompt_embeds
     
     def set_scale(self, scale):
@@ -162,15 +160,15 @@ def get_args():
     parser.add_argument(
         "--ckpt_path",
         type=str,
-        default="logs/train/runs/ipadapter_raw/2024-12-29_21-30-22/checkpoints/last.ckpt",
+        default="logs/train/runs/ipadapter_mask_spi/2024-12-30_17-13-33/checkpoints/last.ckpt",
     )
     parser.add_argument(
-        "--model_config", type=str, default="configs/model/ipadapter_raw.yaml"
+        "--model_config", type=str, default="configs/model/ipadapter_mask_spi.yaml"
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="outputs/ipadapter_raw/",
+        default="outputs/ipadapter_mask_spi/",
     )
     parser.add_argument("--tokenizer_id", type=str, default="checkpoints/stablev15")
     parser.add_argument("--seed", type=int, default=42)
@@ -179,7 +177,7 @@ def get_args():
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--num_inference_steps", type=int, default=50)
-    parser.add_argument("--scale",type=float,default=1.0)
+    parser.add_argument("--scale",type=float,default=1)
     parser.add_argument(
         "--save_denoising",
         action="store_true",
@@ -194,7 +192,7 @@ def get_args():
 def get_pipeline(args):
     ckpt = torch.load(args.ckpt_path, map_location="cpu")
     model_config = OmegaConf.load(args.model_config)  # 加载model config file
-    model: IPAdapterRawLitModule = hydra.utils.instantiate(model_config)
+    model: IPAdapterMaskSpiLitModule = hydra.utils.instantiate(model_config)
     model.load_state_dict(ckpt["state_dict"])
     model.to(args.device)
     model.eval()

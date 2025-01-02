@@ -61,12 +61,6 @@ class MMCelebAHQ(Dataset):
                 transforms.Normalize([0.5], [0.5]),
             ]
         )
-        self.mask_transforms = transforms.Compose([
-            transforms.Resize(size),
-            transforms.CenterCrop(size),
-            transforms.ToTensor(),
-            transforms.Lambda(lambd=lambda x:x.long())
-        ])
 
     def get_remapped_mask(self,mask:Image.Image | np.ndarray):
         if isinstance(mask,Image.Image):
@@ -134,7 +128,7 @@ class MMCelebAHQ(Dataset):
 
     def get_mask(self, filename):
         filename = os.path.join(self.root, "mask", f"{filename}.png")
-        mask = Image.fromarray(np.array(Image.open(filename)), mode="L")
+        mask = np.array(Image.open(filename))
         return mask
 
     def get_text(self, filename):
@@ -164,7 +158,7 @@ class MMCelebAHQ(Dataset):
         else:
             mask = self.get_mask(index)
         
-        raw_mask = self.mask_transforms(mask)
+        raw_mask = mask
         remapped_mask = self.get_remapped_mask(mask)
 
         if self.text_file is not None:

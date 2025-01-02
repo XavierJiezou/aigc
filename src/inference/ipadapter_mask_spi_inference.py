@@ -172,12 +172,12 @@ def get_args():
     )
     parser.add_argument("--tokenizer_id", type=str, default="checkpoints/stablev15")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument("--device", type=str, default="cuda:6")
     parser.add_argument("--guidance_scale", type=int, default=7.5)
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--num_inference_steps", type=int, default=50)
-    parser.add_argument("--scale",type=float,default=1)
+    parser.add_argument("--scale",type=float,default=1.0)
     parser.add_argument(
         "--save_denoising",
         action="store_true",

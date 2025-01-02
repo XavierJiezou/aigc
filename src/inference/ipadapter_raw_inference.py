@@ -167,24 +167,16 @@ def get_args():
     parser.add_argument(
         "--model_config", type=str, default="configs/model/ipadapter_raw.yaml"
     )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        default="outputs/ipadapter_raw/",
-    )
+    parser.add_argument("--output_dir", type=str, default="outputs/ipadapter_raw/")
     parser.add_argument("--tokenizer_id", type=str, default="checkpoints/stablev15")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", type=str, default="cuda")
+    parser.add_argument("--device", type=str, default="cuda:2")
     parser.add_argument("--guidance_scale", type=int, default=7.5)
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--num_inference_steps", type=int, default=50)
     parser.add_argument("--scale",type=float,default=1.0)
-    parser.add_argument(
-        "--save_denoising",
-        action="store_true",
-        help="Whether to save the denoising results",
-    )
+    parser.add_argument("--save_denoising", action="store_true", help="Whether to save the denoising results")
     parser.add_argument("--tmp_dir", type=str, default="tmp")
     parser.add_argument("--duration", type=int, default=1)
     args = parser.parse_args()

@@ -1,5 +1,4 @@
 import warnings
-
 warnings.filterwarnings("ignore")
 import shutil
 import imageio
@@ -50,19 +49,13 @@ class IPAdapterPipeline:
         self.sd_pipeline:StableDiffusionPipeline = sd_pipeline
         self.ipadapter = ipadapter
         self.device = device
-        self.mask_transforms = transforms.Compose([
-            transforms.Resize(size),
-            transforms.CenterCrop(size),
-            transforms.ToTensor(),
-            transforms.Lambda(lambd=lambda x:x.long())
-        ])
 
     @torch.inference_mode()
     def get_image_embeds(self, pil_image=None, clip_image_embeds=None):
         if pil_image is not None:
             if isinstance(pil_image, Image.Image):
                 pil_image = [pil_image]
-            clip_image = self.mask_transforms(pil_image[0])
+            clip_image = np.array(pil_image[0]).unsqueeze(0)
             clip_image_embeds = self.ipadapter.mask_encoder(clip_image.to(self.device))
         else:
             clip_image_embeds = clip_image_embeds.to(self.device)
@@ -133,6 +126,7 @@ class IPAdapterPipeline:
             prompt_embeds = torch.cat([prompt_embeds_, image_prompt_embeds], dim=1)
             # prompt_embeds = torch.cat([prompt_embeds_, image_prompt_embeds], dim=1)
             # negative_prompt_embeds = torch.cat([negative_prompt_embeds_, uncond_image_prompt_embeds], dim=1)
+            
             negative_prompt_embeds = torch.cat([negative_prompt_embeds_, uncond_image_prompt_embeds], dim=1)
 
         generator = get_generator(seed, self.device)
@@ -172,7 +166,7 @@ def get_args():
     )
     parser.add_argument("--tokenizer_id", type=str, default="checkpoints/stablev15")
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", type=str, default="cuda:6")
+    parser.add_argument("--device", type=str, default="cuda:0")
     parser.add_argument("--guidance_scale", type=int, default=7.5)
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--width", type=int, default=512)

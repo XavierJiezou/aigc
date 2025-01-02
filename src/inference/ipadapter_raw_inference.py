@@ -50,19 +50,13 @@ class IPAdapterPipeline:
         self.sd_pipeline:StableDiffusionPipeline = sd_pipeline
         self.ipadapter = ipadapter
         self.device = device
-        self.mask_transforms = transforms.Compose([
-            transforms.Resize(size),
-            transforms.CenterCrop(size),
-            transforms.ToTensor(),
-            transforms.Lambda(lambd=lambda x:x.long())
-        ])
 
     @torch.inference_mode()
     def get_image_embeds(self, pil_image=None, clip_image_embeds=None):
         if pil_image is not None:
             if isinstance(pil_image, Image.Image):
                 pil_image = [pil_image]
-            clip_image = self.mask_transforms(pil_image[0])
+            clip_image = np.array(pil_image[0]).unsqueeze(0)
             clip_image_embeds = self.ipadapter.mask_encoder(clip_image.to(self.device))
         else:
             clip_image_embeds = clip_image_embeds.to(self.device)

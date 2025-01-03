@@ -117,7 +117,7 @@ class MMCelebAHQDataModule(LightningDataModule):
 
     def collate_fn(self, examples):
         input_ids = [example["instance_prompt_ids"] for example in examples]
-        raw_masks = [example["mask"] for example in examples]
+        raw_masks = [torch.tensor(example["mask"]) for example in examples]
         remapped_masks = [torch.tensor(example["remapped_mask"]) for example in examples]
         remapped_masks = torch.stack(remapped_masks).long()
 

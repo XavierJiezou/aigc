@@ -1,0 +1,43 @@
+_target_: src.models.ipadapter_mask_spi_proj_module.IPAdapterMaskSpiProjLitModule
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: 1e-4
+  weight_decay: 0.01
+
+# scheduler:
+#   _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+#   _partial_: true
+#   mode: min
+#   factor: 0.1
+#   patience: 10
+
+unet: checkpoints/stablev15
+vae: checkpoints/stablev15
+text_encoder: checkpoints/stablev15
+diffusion_schedule: checkpoints/stablev15
+
+mask_proj:
+  _target_: src.models.components.proj.Proj
+  embed_dim: 768
+  hidden_dim: 1536
+
+text_proj:
+  _target_: src.models.components.proj.Proj
+  embed_dim: 768
+  hidden_dim: 1536
+
+mask_encoder:
+  _target_: src.models.components.mask_encoder_spi.MaskEncoder
+  num_embeddings: 19
+  embedding_dim: 3
+  image_resolution: 224
+  vision_patch_size: 16
+  vision_width: 768
+  vision_layers: 12
+  embed_dim: 512
+mask_encoder_weight_path: logs/train/runs/mask_clip/2024-12-29_00-24-22/checkpoints/epoch=031-val_loss=0.0398.ckpt
+froze_components: ["vae","text_encoder","unet","mask_encoder"]
+# compile model for faster training with pytorch 2.0
+compile: false

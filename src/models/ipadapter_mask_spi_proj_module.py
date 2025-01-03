@@ -13,14 +13,15 @@ from torchmetrics import MaxMetric, MeanMetric
 from transformers import CLIPTextModel, CLIPVisionModelWithProjection
 from src.models.components.image_proj_model import ImageProjModel
 from diffusers.optimization import get_scheduler
-from src.models.components.attention_processor import (
+from src.models.components.attention_train_two_processor import (
     AttnProcessor2_0 as AttnProcessor,
     IPAttnProcessor2_0 as IPAttnProcessor,
 )
 from src.models.components.mask_encoder_spi import MaskEncoder
+from src.models.components.proj import Proj
 
 
-class IPAdapterMaskSpiLitModule(LightningModule):
+class IPAdapterMaskSpiProjLitModule(LightningModule):
     def __init__(
         self,
         unet: UNet2DConditionModel | str,
@@ -31,6 +32,8 @@ class IPAdapterMaskSpiLitModule(LightningModule):
         mask_encoder: MaskEncoder | str,
         mask_encoder_weight_path: str,
         froze_components=["vae", "text_encoder"],
+        mask_proj: Proj | nn.Identity = nn.Identity(),
+        text_proj: Proj | nn.Identity = nn.Identity(),
         compile: bool = False,
     ) -> None:
         super().__init__()
@@ -45,6 +48,8 @@ class IPAdapterMaskSpiLitModule(LightningModule):
                 "text_encoder",
                 "vae",
                 "mask_encoder",
+                "mask_proj",
+                "text_proj"
             ],
         )
         self.unet = unet
@@ -69,6 +74,9 @@ class IPAdapterMaskSpiLitModule(LightningModule):
                 diffusion_schedule, subfolder="scheduler"
             )
 
+        self.mask_proj = mask_proj
+
+        self.text_proj = text_proj
         # init adapter modules
         attn_procs = {}
         unet_sd = self.unet.state_dict()
@@ -95,9 +103,13 @@ class IPAdapterMaskSpiLitModule(LightningModule):
                 weights = {
                     "to_k_ip.weight": unet_sd[layer_name + ".to_k.weight"],
                     "to_v_ip.weight": unet_sd[layer_name + ".to_v.weight"],
+                    "to_k_text.weight":unet_sd[layer_name + ".to_k.weight"],
+                    "to_v_text.weight":unet_sd[layer_name + ".to_v.weight"],
                 }
                 attn_procs[name] = IPAttnProcessor(
-                    hidden_size=hidden_size, cross_attention_dim=cross_attention_dim, num_tokens=196
+                    hidden_size=hidden_size,
+                    cross_attention_dim=cross_attention_dim,
+                    num_tokens=196,
                 )
                 attn_procs[name].load_state_dict(weights)
         self.unet.set_attn_processor(attn_procs)
@@ -178,9 +190,13 @@ class IPAdapterMaskSpiLitModule(LightningModule):
             text_features = self.text_encoder(batch["instance_prompt_ids"])[
                 0
             ]  # encoder_hidden_states shape : bs 77 1024
+        
+        text_features = self.text_proj(text_features)
 
         with torch.no_grad():
             image_embeds = self.mask_encoder.forward(batch["mask"])  # [bs,196,768]
+        
+        image_embeds = self.mask_proj(image_embeds)
 
         image_embeds_ = []
         for image_embed, drop_image_embed in zip(

@@ -35,8 +35,8 @@ class MMCelebAHQ(Dataset):
             [
                 transforms.Resize(size),
                 transforms.CenterCrop(size),
-                transforms.PILToTensor(),
-                transforms.Lambda(lambda x: x.float()),  # 转换为 float 类型
+                transforms.PILToTensor(), # 0, 1, 2, 3, 18
+                transforms.Lambda(lambda x: x.float()),  # 0.0, 1.0, 2.0, 3.0, 18.0
             ]
         )
         self.transforms = transforms.Compose(

@@ -36,7 +36,7 @@ class MMCelebAHQ(Dataset):
         self.mask_file = None
         self.text_file = None
 
-        self.clip_image_processor = CLIPImageProcessor()
+        # self.clip_image_processor = CLIPImageProcessor()
 
         self.filenames = self.get_filenames(split, face_file, mask_file, text_file)
         self.tokenizer = CLIPTokenizer.from_pretrained(
@@ -61,6 +61,7 @@ class MMCelebAHQ(Dataset):
                 transforms.Normalize([0.5], [0.5]),
             ]
         )
+        
 
     def get_remapped_mask(self,mask:Image.Image | np.ndarray):
         if isinstance(mask,Image.Image):
@@ -128,8 +129,7 @@ class MMCelebAHQ(Dataset):
 
     def get_mask(self, filename):
         filename = os.path.join(self.root, "mask", f"{filename}.png")
-        mask = np.array(Image.open(filename))
-        mask = torch.tensor(mask).long()
+        mask = np.array(Image.open(filename)).astype(np.int64)
         return mask
 
     def get_text(self, filename):

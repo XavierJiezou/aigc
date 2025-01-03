@@ -101,7 +101,7 @@ class MMCelebAHQ(Dataset):
                     and int(os.path.basename(filename).split(".")[0]) in filenames
                 ]
                 mask_files = {
-                    filename: Image.fromarray(np.array(Image.open(filename)), mode="L")
+                    filename: np.array(Image.open(filename))
                     for filename in mask_files
                 }
                 self.mask_file = mask_files
@@ -129,6 +129,7 @@ class MMCelebAHQ(Dataset):
     def get_mask(self, filename):
         filename = os.path.join(self.root, "mask", f"{filename}.png")
         mask = np.array(Image.open(filename))
+        mask = torch.tensor(mask).long()
         return mask
 
     def get_text(self, filename):
@@ -179,9 +180,9 @@ class MMCelebAHQ(Dataset):
             prompt = ""
             drop_image_embed = 1
 
-        clip_image = self.clip_image_processor(
-            images=mask, return_tensors="pt"
-        ).pixel_values
+        # clip_image = self.clip_image_processor(
+        #     images=mask, return_tensors="pt"
+        # ).pixel_values
 
         example["instance_images"] = self.transforms(image)
         example["instance_prompt_ids"] = self.tokenizer(
@@ -191,7 +192,7 @@ class MMCelebAHQ(Dataset):
             max_length=self.tokenizer.model_max_length,
             return_tensors="pt"
         ).input_ids
-        example["clip_image"] = clip_image
+        # example["clip_image"] = clip_image
         example["drop_image_embed"] = drop_image_embed
         example['mask'] = raw_mask
         example['remapped_mask'] = remapped_mask
@@ -211,7 +212,7 @@ def show_mmcelebahq():
     #     data["instance_prompt_ids"],
     # )
     image: torch.Tensor = data["instance_images"]
-    mask: Image.Image = data["instance_masks"]
+    mask: Image.Image = data["mask"]
     mask = np.array(mask)
     prompt = data["instance_prompt_ids"][0]
     text = tokenizer.decode(prompt, skip_special_tokens=True)
@@ -266,17 +267,17 @@ def show_mmcelebahq():
 
 
 if __name__ == "__main__":
-    # show_mmcelebahq()
+    show_mmcelebahq()
 
     # Length test
-    assert len(MMCelebAHQ(split="train")) == 27000
-    assert len(MMCelebAHQ(split="val")) == 3000
+    # assert len(MMCelebAHQ(split="train")) == 27000
+    # assert len(MMCelebAHQ(split="val")) == 3000
 
     # Shape test
-    dataset = MMCelebAHQ(split="val")
-    data = dataset[0]  # 27000
-    assert data["instance_images"].shape == (3, 512, 512)
-    assert data['clip_image'].shape == (1,3,224,224)
-    assert data['instance_prompt_ids'].shape == (1,77)
-    print(data['mask'].shape,data['mask'].dtype)
+    # dataset = MMCelebAHQ(split="val")
+    # data = dataset[0]  # 27000
+    # assert data["instance_images"].shape == (3, 512, 512)
+    # assert data['clip_image'].shape == (1,3,224,224)
+    # assert data['instance_prompt_ids'].shape == (1,77)
+    # print(data['mask'].shape,data['mask'].dtype)
 

@@ -126,7 +126,7 @@ class MMCelebAHQDataModule(LightningDataModule):
         input_ids = torch.cat(input_ids,dim=0)
         pixel_values = [example["instance_images"] for example in examples]
         drop_image_embeds = [example["drop_image_embed"] for example in examples]
-        clip_images = torch.cat([example["clip_image"] for example in examples], dim=0)
+        # clip_images = torch.cat([example["clip_image"] for example in examples], dim=0)
 
         pixel_values = torch.stack(pixel_values)
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()
@@ -135,7 +135,7 @@ class MMCelebAHQDataModule(LightningDataModule):
             "instance_prompt_ids": input_ids,
             "instance_images": pixel_values,
             "drop_image_embeds": drop_image_embeds,
-            "clip_images": clip_images,
+            # "clip_images": clip_images,
             "mask":raw_masks,
             "remapped_mask":remapped_masks
         }

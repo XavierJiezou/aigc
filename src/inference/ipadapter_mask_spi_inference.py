@@ -11,30 +11,20 @@ from typing import List
 import torch
 from diffusers import StableDiffusionPipeline
 from PIL import Image
-from transformers import CLIPImageProcessor
 from matplotlib import pyplot as plt
 import numpy as np
-from torchvision import transforms
-from diffusers import DPMSolverMultistepScheduler
-from src.models.components.attention_processor import (
-    AttnProcessor2_0 as AttnProcessor,
-    IPAttnProcessor2_0 as IPAttnProcessor,
-)
+from src.models.components.attention_processor import IPAttnProcessor2_0 as IPAttnProcessor
 from src.models.ipadapter_mask_spi_module import IPAdapterMaskSpiLitModule
 
 
 def get_generator(seed, device):
-
     if seed is not None:
         if isinstance(seed, list):
-            generator = [
-                torch.Generator(device).manual_seed(seed_item) for seed_item in seed
-            ]
+            generator = [torch.Generator(device).manual_seed(seed_item) for seed_item in seed]
         else:
             generator = torch.Generator(device).manual_seed(seed)
     else:
         generator = None
-
     return generator
 
 
@@ -55,7 +45,7 @@ class IPAdapterPipeline:
         if pil_image is not None:
             if isinstance(pil_image, Image.Image):
                 pil_image = [pil_image]
-            clip_image = np.array(pil_image[0]).unsqueeze(0)
+            clip_image = torch.tensor(np.array(pil_image[0])).unsqueeze(0).long()
             clip_image_embeds = self.ipadapter.mask_encoder(clip_image.to(self.device))
         else:
             clip_image_embeds = clip_image_embeds.to(self.device)
@@ -145,25 +135,11 @@ class IPAdapterPipeline:
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--prompt",
-        type=str,
-        default="She wears heavy makeup. She has mouth slightly open. She is smiling, and attractive.",
-    )
+    parser.add_argument("--prompt", type=str, default="She wears heavy makeup. She has mouth slightly open. She is smiling, and attractive.")
     parser.add_argument("--mask", default="data/mmcelebahq/mask/27504.png")
-    parser.add_argument(
-        "--ckpt_path",
-        type=str,
-        default="logs/train/runs/ipadapter_mask_spi/2024-12-30_17-13-33/checkpoints/last.ckpt",
-    )
-    parser.add_argument(
-        "--model_config", type=str, default="configs/model/ipadapter_mask_spi.yaml"
-    )
-    parser.add_argument(
-        "--output_dir",
-        type=str,
-        default="outputs/ipadapter_mask_spi/",
-    )
+    parser.add_argument("--ckpt_path", type=str, default="logs/train/runs/ipadapter_mask_spi/2024-12-30_17-13-33/checkpoints/last.ckpt")
+    parser.add_argument("--model_config", type=str, default="configs/model/ipadapter_mask_spi.yaml")
+    parser.add_argument("--output_dir", type=str, default="outputs/ipadapter_mask_spi/")
     parser.add_argument("--tokenizer_id", type=str, default="checkpoints/stablev15")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", type=str, default="cuda:0")
@@ -171,12 +147,8 @@ def get_args():
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--num_inference_steps", type=int, default=50)
-    parser.add_argument("--scale",type=float,default=1.0)
-    parser.add_argument(
-        "--save_denoising",
-        action="store_true",
-        help="Whether to save the denoising results",
-    )
+    parser.add_argument("--scale",type=float,default=0.5)
+    parser.add_argument("--save_denoising", action="store_true", help="Whether to save the denoising results")
     parser.add_argument("--tmp_dir", type=str, default="tmp")
     parser.add_argument("--duration", type=int, default=1)
     args = parser.parse_args()
@@ -190,13 +162,8 @@ def get_pipeline(args):
     model.load_state_dict(ckpt["state_dict"])
     model.to(args.device)
     model.eval()
-    tokenizer = CLIPTokenizer.from_pretrained(
-        args.tokenizer_id,
-        subfolder="tokenizer",
-    )
-    feature_extractor = CLIPFeatureExtractor.from_pretrained(
-        "checkpoints/stablev15", subfolder="feature_extractor"
-    )
+    tokenizer = CLIPTokenizer.from_pretrained(args.tokenizer_id, subfolder="tokenizer")
+    feature_extractor = CLIPFeatureExtractor.from_pretrained("checkpoints/stablev15", subfolder="feature_extractor")
     scheduler = model.diffusion_schedule
     pipeline = StableDiffusionPipeline(
         vae=model.vae,
@@ -209,9 +176,7 @@ def get_pipeline(args):
     ).to(args.device)
     # pipeline.unet = torch.compile(pipeline.unet, mode="reduce-overhead", fullgraph=True)
     # pipeline.enable_xformers_memory_efficient_attention()
-    ipadapter_pipe = IPAdapterPipeline(
-        sd_pipeline=pipeline, ipadapter=model, device=args.device
-    )
+    ipadapter_pipe = IPAdapterPipeline(sd_pipeline=pipeline, ipadapter=model, device=args.device)
     return ipadapter_pipe
 
 

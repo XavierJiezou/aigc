@@ -97,7 +97,7 @@ class IPAdapterMaskSpiLitModule(LightningModule):
                     "to_v_ip.weight": unet_sd[layer_name + ".to_v.weight"],
                 }
                 attn_procs[name] = IPAttnProcessor(
-                    hidden_size=hidden_size, cross_attention_dim=cross_attention_dim
+                    hidden_size=hidden_size, cross_attention_dim=cross_attention_dim, num_tokens=196
                 )
                 attn_procs[name].load_state_dict(weights)
         self.unet.set_attn_processor(attn_procs)

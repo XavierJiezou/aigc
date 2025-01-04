@@ -13,10 +13,6 @@ from torchmetrics import MaxMetric, MeanMetric
 from transformers import CLIPTextModel, CLIPVisionModelWithProjection
 from src.models.components.image_proj_model import ImageProjModel
 from diffusers.optimization import get_scheduler
-from src.models.components.attention_train_two_processor import (
-    AttnProcessor2_0 as AttnProcessor,
-    IPAttnProcessor2_0 as IPAttnProcessor,
-)
 from src.models.components.mask_encoder_spi import MaskEncoder
 from src.models.components.proj import Proj
 
@@ -34,9 +30,21 @@ class IPAdapterMaskSpiProjLitModule(LightningModule):
         froze_components=["vae", "text_encoder"],
         mask_proj: Proj | nn.Identity = nn.Identity(),
         text_proj: Proj | nn.Identity = nn.Identity(),
+        text_crossattention=True,
         compile: bool = False,
     ) -> None:
         super().__init__()
+
+        if text_crossattention:
+            from src.models.components.attention_train_two_processor import (
+                AttnProcessor2_0 as AttnProcessor,
+                IPAttnProcessor2_0 as IPAttnProcessor,
+            )
+        else:
+            from src.models.components.attention_processor import (
+                AttnProcessor2_0 as AttnProcessor,
+                IPAttnProcessor2_0 as IPAttnProcessor,
+            )
 
         # this line allows to access init params with 'self.hparams' attribute
         # also ensures init params will be stored in ckpt
@@ -49,7 +57,7 @@ class IPAdapterMaskSpiProjLitModule(LightningModule):
                 "vae",
                 "mask_encoder",
                 "mask_proj",
-                "text_proj"
+                "text_proj",
             ],
         )
         self.unet = unet
@@ -100,12 +108,18 @@ class IPAdapterMaskSpiProjLitModule(LightningModule):
                 attn_procs[name] = AttnProcessor()
             else:
                 layer_name = name.split(".processor")[0]
-                weights = {
-                    "to_k_ip.weight": unet_sd[layer_name + ".to_k.weight"],
-                    "to_v_ip.weight": unet_sd[layer_name + ".to_v.weight"],
-                    "to_k_text.weight":unet_sd[layer_name + ".to_k.weight"],
-                    "to_v_text.weight":unet_sd[layer_name + ".to_v.weight"],
-                }
+                if text_crossattention:
+                    weights = {
+                        "to_k_ip.weight": unet_sd[layer_name + ".to_k.weight"],
+                        "to_v_ip.weight": unet_sd[layer_name + ".to_v.weight"],
+                        "to_k_text.weight": unet_sd[layer_name + ".to_k.weight"],
+                        "to_v_text.weight": unet_sd[layer_name + ".to_v.weight"],
+                    }
+                else:
+                    weights = {
+                        "to_k_ip.weight": unet_sd[layer_name + ".to_k.weight"],
+                        "to_v_ip.weight": unet_sd[layer_name + ".to_v.weight"],
+                    }
                 attn_procs[name] = IPAttnProcessor(
                     hidden_size=hidden_size,
                     cross_attention_dim=cross_attention_dim,
@@ -190,12 +204,12 @@ class IPAdapterMaskSpiProjLitModule(LightningModule):
             text_features = self.text_encoder(batch["instance_prompt_ids"])[
                 0
             ]  # encoder_hidden_states shape : bs 77 1024
-        
+
         text_features = self.text_proj(text_features)
 
         with torch.no_grad():
             image_embeds = self.mask_encoder.forward(batch["mask"])  # [bs,196,768]
-        
+
         image_embeds = self.mask_proj(image_embeds)
 
         image_embeds_ = []

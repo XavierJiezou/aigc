@@ -15,7 +15,7 @@ data:
 
 tags: ["celebahq", "ipadapter_mask_spi_proj_no_text_proj_no_text_attn"]
 model:
-  mask_proj:
+  text_proj:
     _target_: torch.nn.Identity
   text_crossattention: false
 

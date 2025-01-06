@@ -1,0 +1,30 @@
+_target_: src.models.ip_adapter_module.IPAdapterLitModule
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: 1e-5
+
+# scheduler:
+#   _target_: torch.optim.lr_scheduler.ReduceLROnPlateau
+#   _partial_: true
+#   mode: min
+#   factor: 0.1
+#   patience: 10
+
+image_proj_model:
+  _target_: src.models.components.image_proj_model.ImageProjModel
+  cross_attention_dim: 768
+  clip_embeddings_dim: 768
+  clip_extra_context_tokens: 4
+
+
+unet: checkpoints/stablev15
+vae: checkpoints/stablev15
+text_encoder: checkpoints/stablev15
+diffusion_schedule: checkpoints/stablev15
+image_encoder: checkpoints/clip_large_patch14
+
+froze_components: ["vae","text_encoder","unet","image_encoder"]
+# compile model for faster training with pytorch 2.0
+compile: false

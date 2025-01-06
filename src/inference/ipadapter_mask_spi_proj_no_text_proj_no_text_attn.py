@@ -142,7 +142,7 @@ def get_args():
     parser.add_argument("--mask", default="data/mmcelebahq/mask/27504.png")
     parser.add_argument("--ckpt_path", type=str, default="logs/train/runs/ipadapter_mask_spi_proj_no_text_proj_no_text_attn/2025-01-04_20-08-37/checkpoints/last.ckpt")
     parser.add_argument("--model_config", type=str, default="configs/model/ipadapter_mask_spi_proj_module.yaml")
-    parser.add_argument("--output_dir", type=str, default="outputs/ipadapter_mask_spi_proj/")
+    parser.add_argument("--output_dir", type=str, default="outputs/ipadapter_mask_spi_proj_no_text_proj_no_text_attn/")
     parser.add_argument("--tokenizer_id", type=str, default="checkpoints/stablev15")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", type=str, default="cuda")
@@ -161,9 +161,10 @@ def get_args():
 def get_pipeline(args):
     ckpt = torch.load(args.ckpt_path, map_location="cpu")
     model_config = OmegaConf.load(args.model_config)  # 加载model config file
-    model_config['text_crossattention'] = False
+    model_config['text_crossattention'] = True
     model: IPAdapterMaskSpiProjLitModule = hydra.utils.instantiate(model_config)
     model.text_proj = nn.Identity()
+    model.mask_proj = nn.Identity()
     model.load_state_dict(ckpt["state_dict"])
     model.to(args.device)
     model.eval()

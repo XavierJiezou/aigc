@@ -15,7 +15,7 @@ from diffusers import StableDiffusionPipeline
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--prompt", type=str, default="a photo of a corgi dog")
+    parser.add_argument("--prompt", type=str, default="She is wearing lipstick. She is attractive and has straight hair.")
     parser.add_argument("--ckpt_path", type=str, default=None)
     parser.add_argument(
         "--model_config", type=str, default="configs/model/stable_diffusion.yaml"
@@ -25,12 +25,12 @@ def get_args():
         type=str,
         default="outputs/stable_diffusion",
     )
-    parser.add_argument("--image_name",type=str,default="sd.png")
+    parser.add_argument("--image_name",type=str,default="27000.png")
     parser.add_argument(
         "--tokenizer_id", type=str, default="checkpoints/stablev15"
     )
     parser.add_argument("--seed", type=int, default=42)
-    parser.add_argument("--device", type=str, default="cuda:4")
+    parser.add_argument("--device", type=str, default="cuda")
     parser.add_argument("--guidance_scale", type=int, default=7.5)
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--width", type=int, default=512)
@@ -63,7 +63,7 @@ def get_gif(args):
 
 def get_pipeline(args):
     ckpt = None
-    if ckpt is not None:
+    if args.ckpt_path is not None:
         ckpt = torch.load(args.ckpt_path, map_location=args.device)
     model_config = OmegaConf.load(args.model_config)  # 加载model config file
     model: DiffusionLitModule = hydra.utils.instantiate(model_config)

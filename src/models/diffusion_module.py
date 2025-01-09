@@ -69,6 +69,7 @@ class DiffusionLitModule(LightningModule):
         self.vae = vae
         self.text_encoder = text_encoder
         self.feature_extractor = feature_extractor
+        self.diffusion_schedule = diffusion_schedule
 
         if isinstance(unet, str):
             self.unet = UNet2DConditionModel.from_pretrained(unet, subfolder="unet")
@@ -80,10 +81,12 @@ class DiffusionLitModule(LightningModule):
             self.text_encoder = CLIPTextModel.from_pretrained(text_encoder,subfolder="text_encoder")
         
         if isinstance(feature_extractor, str):
-            self.feature_extractor = CLIPFeatureExtractor.from_pretrained(feature_extractor)
+            self.feature_extractor = CLIPFeatureExtractor.from_pretrained(feature_extractor,subfolder="feature_extractor")
+
+        if isinstance(diffusion_schedule,str):
+            self.diffusion_schedule = DDPMScheduler.from_pretrained(diffusion_schedule,subfolder="scheduler")
     
 
-        self.diffusion_schedule = diffusion_schedule
 
         # loss function
         self.criterion = torch.nn.CrossEntropyLoss()

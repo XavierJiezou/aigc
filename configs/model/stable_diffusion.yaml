@@ -17,12 +17,7 @@ scheduler: null
 unet: checkpoints/stablev15
 vae: checkpoints/stablev15
 text_encoder: checkpoints/stablev15
-feature_extractor: checkpoints/clip_large_patch14
-diffusion_schedule:
-  _target_: diffusers.DDPMScheduler
-  beta_start: 0.00085
-  beta_end: 0.012    
-  beta_schedule: scaled_linear
-  num_train_timesteps: 1000
+feature_extractor: checkpoints/stablev15
+diffusion_schedule: checkpoints/stablev15
 # compile model for faster training with pytorch 2.0
 compile: false

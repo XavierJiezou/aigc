@@ -68,7 +68,7 @@ def get_gif(args):
 
 def get_pipeline(args):
     ckpt = None
-    if ckpt is not None:
+    if args.ckpt_path is not None:
         ckpt = torch.load(args.ckpt_path, map_location=args.device)
     model_config = OmegaConf.load(args.model_config)  # 加载model config file
     model: DiffusionLitModule = hydra.utils.instantiate(model_config)

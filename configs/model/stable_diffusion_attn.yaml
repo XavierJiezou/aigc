@@ -1,0 +1,14 @@
+_target_: src.models.stable_diffusion_attn.StableDiffusionAttnLitModule
+
+unet: checkpoints/stablev15
+diffusion_schedule: checkpoints/stablev15
+vae: checkpoints/stablev15
+text_encoder: checkpoints/stablev15
+
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: 1e-5
+
+compile: false

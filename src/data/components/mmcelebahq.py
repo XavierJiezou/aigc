@@ -55,8 +55,8 @@ class MMCelebAHQ(Dataset):
         ]
         self.transforms = transforms.Compose(
             [
-                transforms.Resize(size),
-                transforms.CenterCrop(size),
+                # transforms.Resize(size),
+                # transforms.CenterCrop(size),
                 transforms.ToTensor(),
                 transforms.Normalize([0.5], [0.5]),
             ]
@@ -141,7 +141,7 @@ class MMCelebAHQ(Dataset):
         return caption
 
     def __getitem__(self, index):
-        index = index if self.split == "train" else index + 27000
+        index = self.filenames[index]
         example = {}
         image = None
         mask = None

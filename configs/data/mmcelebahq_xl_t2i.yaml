@@ -1,0 +1,13 @@
+_target_: src.data.mmcelebahq_xl_t2i_dataloader.MMCelebAHQDataModule
+root: data/mmcelebahq
+face_file: null
+mask_file: null
+text_file: data/mmcelebahq/text.json
+pretrained_model_name_or_path: checkpoints/stable-diffusion-xl-base-1.0
+revision: null
+variant: null
+
+batch_size: 8
+num_workers: 4
+pin_memory: true
+proportion_empty_prompts: 0.0

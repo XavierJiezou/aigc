@@ -1,0 +1,36 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: mmcelebahq_xl_t2i
+  - override /model: sdxl_t2i_module
+  - override /callbacks: default
+  - override /trainer: gpu
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["celebahq", "sdxl_t2i_module"]
+
+seed: 42
+
+logger:
+  wandb:
+    tags: ${tags}
+    group: "sdxl_t2i_module"
+  aim:
+    experiment: "sdxl_t2i_module"
+  
+  tensorboard:
+    _target_: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
+    save_dir: "${paths.output_dir}/tensorboard/"
+    name: sdxl_t2i_module
+    log_graph: False
+    default_hp_metric: True
+    prefix: ""
+
+trainer:
+  strategy: ddp_find_unused_parameters_true
+  

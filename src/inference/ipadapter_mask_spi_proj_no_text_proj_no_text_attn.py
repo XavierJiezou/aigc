@@ -273,7 +273,7 @@ def main():
     suffix = base_name.split(".")[1]
     prefix = base_name.split(".")[0] + f"_{args.scale}."
     base_name = prefix + suffix
-    output_path = os.path.join(args.output_dir, base_name)
+    output_path = os.path.join(args.output_dir, base_name).replace(".png",".jpg")
     image.save(output_path)
     print(f"done.image saved to {output_path}")
 

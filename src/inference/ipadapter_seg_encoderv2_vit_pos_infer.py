@@ -21,7 +21,7 @@ from src.models.components.attention_processor import (
     AttnProcessor2_0 as AttnProcessor,
     IPAttnProcessor2_0 as IPAttnProcessor,
 )
-from src.models.ipadapter_seg_encoder import IpadapterSegEncoderLitModule
+from src.models.ipadapter_seg_encoderv2_vit_pos import IpadapterSegEncoderv2VitPosLitModule
 
 
 def get_generator(seed, device):
@@ -43,11 +43,11 @@ class IPAdapterPipeline:
     def __init__(
         self,
         sd_pipeline: StableDiffusionPipeline,
-        ipadapter: IpadapterSegEncoderLitModule,
+        ipadapter: IpadapterSegEncoderv2VitPosLitModule,
         device: str,
         size=512,
     ):
-        self.sd_pipeline:StableDiffusionPipeline = sd_pipeline
+        self.sd_pipeline: StableDiffusionPipeline = sd_pipeline
         self.ipadapter = ipadapter
         self.device = device
 
@@ -57,7 +57,7 @@ class IPAdapterPipeline:
             if isinstance(pil_image, Image.Image):
                 # pil_image = [pil_image]
                 pil_image = np.array(pil_image).astype(np.int64)
-            clip_image =  torch.tensor(pil_image).unsqueeze(0).to(self.device)
+            clip_image =  torch.tensor(pil_image).unsqueeze(0).unsqueeze(0).to(self.device).float()
             clip_image_embeds = self.ipadapter.seg_encoder(clip_image)
         else:
             clip_image_embeds = clip_image_embeds.to(self.device)
@@ -147,11 +147,11 @@ class IPAdapterPipeline:
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--prompt", type=str, default="The man has brown hair. He is young. He wears necktie. He has no beard.")
-    parser.add_argument("--mask", default="data/mmcelebahq/mask/27604.png")
-    parser.add_argument("--ckpt_path", type=str, default="logs/train/runs/ipipadapter_seg_encoderadapter/2025-03-11_15-53-53/checkpoints/last.ckpt")
-    parser.add_argument("--model_config", type=str, default="configs/model/ipadapter_seg_encoder.yaml")
-    parser.add_argument("--output_dir", type=str, default="outputs/ipadapter_seg_encoder/")
+    parser.add_argument("--prompt", type=str, default="She is wearing lipstick. She is attractive and has straight hair.")
+    parser.add_argument("--mask", default="data/mmcelebahq/mask/27000.png")
+    parser.add_argument("--ckpt_path", type=str, default="logs/train/runs/ipadapter_seg_encoderv2_vit_pos/2025-03-18_12-19-21/checkpoints/last.ckpt")
+    parser.add_argument("--model_config", type=str, default="configs/model/ipadapter_seg_encoderv2_vit_pos.yaml")
+    parser.add_argument("--output_dir", type=str, default="outputs/ipadapter_seg_encoderv2_vit_pos/")
     parser.add_argument("--tokenizer_id", type=str, default="checkpoints/stablev15")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", type=str, default="cuda")
@@ -167,7 +167,7 @@ def get_args():
 def get_pipeline(args):
     ckpt = torch.load(args.ckpt_path, map_location="cpu")
     model_config = OmegaConf.load(args.model_config)  # 加载model config file
-    model: IpadapterSegEncoderLitModule = hydra.utils.instantiate(model_config)
+    model: IpadapterSegEncoderv2VitPosLitModule = hydra.utils.instantiate(model_config)
     model.load_state_dict(ckpt["state_dict"])
     model.to(args.device)
     model.eval()

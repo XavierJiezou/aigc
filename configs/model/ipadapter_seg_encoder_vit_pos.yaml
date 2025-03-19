@@ -1,4 +1,4 @@
-_target_: src.models.stable_diffusion_attn.StableDiffusionAttnLitModule
+_target_: src.models.ipadapter_seg_encoder_vit_pos.IpadapterSegEncoderVitPosLitModule
 
 unet: checkpoints/stablev15
 diffusion_schedule: checkpoints/stablev15

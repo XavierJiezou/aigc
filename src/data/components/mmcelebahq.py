@@ -204,7 +204,7 @@ def show_mmcelebahq():
         "checkpoints/sd_turbo",
         subfolder="tokenizer",
     )
-    dataset = MMCelebAHQ(split="val")
+    dataset = MMCelebAHQ(split="val", face_file=None, mask_file=None, text_file=None)
     data = dataset[0]
     # print(
     #     data["instance_images"].shape,

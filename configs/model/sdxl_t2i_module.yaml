@@ -1,6 +1,6 @@
 _target_: src.models.sdxl_t2i_module.StableDiffusionXLT2ILitModule
 
-pretrained_model_name_or_path: stabilityai/stable-diffusion-xl-base-1.0
+pretrained_model_name_or_path: checkpoints/stable-diffusion-xl-base-1.0
 revision: null
 variant: null
 pretrained_vae_model_name_or_path: null

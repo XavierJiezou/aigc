@@ -143,7 +143,7 @@ def main():
             num_inference_steps=args.num_inference_steps,
             generator=generator,
         ).images[0]
-    output_path = os.path.join(args.output_dir, args.image_name)
+    output_path = os.path.join(args.output_dir, args.image_name).replace(".png",".jpg")
     image.save(output_path)
     print(f"done.image saved to {output_path}")
 

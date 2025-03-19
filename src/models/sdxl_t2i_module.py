@@ -20,7 +20,7 @@ class StableDiffusionXLT2ILitModule(LightningModule):
 
     def __init__(
         self,
-        pretrained_model_name_or_path="stabilityai/stable-diffusion-xl-base-1.0",
+        pretrained_model_name_or_path="checkpoints/stable-diffusion-xl-base-1.0",
         revision=None,
         variant=None,
         pretrained_vae_model_name_or_path=None,
@@ -294,3 +294,6 @@ class StableDiffusionXLT2ILitModule(LightningModule):
             power=self.hparams.lr_power,
         )
         return {"optimizer": optimizer}
+
+if __name__ == "__main__":
+    model = StableDiffusionXLT2ILitModule()

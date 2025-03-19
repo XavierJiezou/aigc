@@ -5,28 +5,28 @@
 
 defaults:
   - override /data: mmcelebahq
-  - override /model: stable_diffusion_attn
+  - override /model: sd_seg_encoder_vit_pos_lora
   - override /callbacks: default
   - override /trainer: gpu
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["celebahq", "stable_diffusion_attn"]
+tags: ["celebahq", "sd_seg_encoder_vit_pos_lora"]
 
 seed: 42
 
 logger:
   wandb:
     tags: ${tags}
-    group: "stable_diffusion_attn"
+    group: "sd_seg_encoder_vit_pos_lora"
   aim:
-    experiment: "stable_diffusion_attn"
+    experiment: "sd_seg_encoder_vit_pos_lora"
   
   tensorboard:
     _target_: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
     save_dir: "${paths.output_dir}/tensorboard/"
-    name: stable_diffusion_attn
+    name: sd_seg_encoder_vit_pos_lora
     log_graph: False
     default_hp_metric: True
     prefix: ""

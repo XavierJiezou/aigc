@@ -4,29 +4,29 @@
 # python train.py experiment=example
 
 defaults:
-  - override /data: mmcelebahq_xl_t2i
-  - override /model: sdxl_t2i_module
+  - override /data: mmcelebahq_hico
+  - override /model: hico
   - override /callbacks: default
   - override /trainer: gpu
 
 # all parameters below will be merged with parameters from default configurations set above
 # this allows you to overwrite only specified parameters
 
-tags: ["celebahq", "sdxl_t2i_module"]
+tags: ["celebahq", "hico"]
 
 seed: 42
 
 logger:
   wandb:
     tags: ${tags}
-    group: "sdxl_t2i_module"
+    group: "hico"
   aim:
-    experiment: "sdxl_t2i_module"
+    experiment: "hico"
   
   tensorboard:
     _target_: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
     save_dir: "${paths.output_dir}/tensorboard/"
-    name: sdxl_t2i_module
+    name: hico
     log_graph: False
     default_hp_metric: True
     prefix: ""

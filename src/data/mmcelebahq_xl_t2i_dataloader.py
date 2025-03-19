@@ -171,8 +171,8 @@ class MMCelebAHQDataModule(LightningDataModule):
         self.text_encoder_one.requires_grad_(False)
         self.text_encoder_two.requires_grad_(False)
 
-        self.tokenizer_one.requires_grad_(False)
-        self.tokenizer_two.requires_grad_(False)
+        # self.tokenizer_one.requires_grad_(False)
+        # self.tokenizer_two.requires_grad_(False)
 
     def prepare_data(self) -> None:
         """Download data if needed. Lightning ensures that `self.prepare_data()` is called only
@@ -187,7 +187,6 @@ class MMCelebAHQDataModule(LightningDataModule):
             face_file=self.hparams.face_file,
             mask_file=self.hparams.mask_file,
             text_file=self.hparams.text_file,
-            size=self.hparams.size,
             split="train",
         )
 
@@ -196,7 +195,6 @@ class MMCelebAHQDataModule(LightningDataModule):
             face_file=self.hparams.face_file,
             mask_file=self.hparams.mask_file,
             text_file=self.hparams.text_file,
-            size=self.hparams.size,
             split="val",
         )
 
@@ -245,9 +243,9 @@ class MMCelebAHQDataModule(LightningDataModule):
         )
 
 
-        prompt_ids = torch.stack([torch.tensor(prompt_embed["prompt_embeds"]) for prompt_embed in prompt_embeds])
-        add_text_embeds = torch.stack([torch.tensor(prompt_embed["text_embeds"]) for prompt_embed in prompt_embeds])
-        add_time_ids = torch.stack([torch.tensor(prompt_embed["time_ids"]) for prompt_embed in prompt_embeds])
+        prompt_ids = torch.stack([prompt_embed for prompt_embed in prompt_embeds["prompt_embeds"]])
+        add_text_embeds = torch.stack([text_embeds for text_embeds in prompt_embeds["text_embeds"]])
+        add_time_ids = torch.stack([time_ids for time_ids in prompt_embeds["time_ids"]])
 
         pixel_values = torch.stack(pixel_values)
         pixel_values = pixel_values.to(memory_format=torch.contiguous_format).float()

@@ -10,88 +10,64 @@ import torch.nn.functional as F
 from lightning import LightningModule
 from torchmetrics import MaxMetric, MeanMetric
 from transformers import CLIPTextModel
+from diffusers.image_processor import PipelineImageInput, VaeImageProcessor
 from diffusers.optimization import get_scheduler
+from transformers import AutoTokenizer, PretrainedConfig
 
 
-class ControlLitModule(LightningModule):
-    """Example of a `LightningModule` for MNIST classification.
+def import_model_class_from_model_name_or_path(
+    pretrained_model_name_or_path: str, revision: str
+):
+    text_encoder_config = PretrainedConfig.from_pretrained(
+        pretrained_model_name_or_path,
+        subfolder="text_encoder",
+        revision=revision,
+    )
+    model_class = text_encoder_config.architectures[0]
 
-    A `LightningModule` implements 8 key methods:
+    if model_class == "CLIPTextModel":
+        from transformers import CLIPTextModel
 
-    ```python
-    def __init__(self):
-    # Define initialization code here.
+        return CLIPTextModel
+    else:
+        raise ValueError(f"{model_class} is not supported.")
 
-    def setup(self, stage):
-    # Things to setup before each stage, 'fit', 'validate', 'test', 'predict'.
-    # This hook is called on every process when using DDP.
 
-    def training_step(self, batch, batch_idx):
-    # The complete training step.
-
-    def validation_step(self, batch, batch_idx):
-    # The complete validation step.
-
-    def test_step(self, batch, batch_idx):
-    # The complete test step.
-
-    def predict_step(self, batch, batch_idx):
-    # The complete predict step.
-
-    def configure_optimizers(self):
-    # Define and configure optimizers and LR schedulers.
-    ```
-
-    Docs:
-        https://lightning.ai/docs/pytorch/latest/common/lightning_module.html
-    """
+class HicoControlnetLitModule(LightningModule):
 
     def __init__(
         self,
-        unet: UNet2DConditionModel | str,
-        diffusion_schedule: DDPMScheduler,
-        optimizer: torch.optim.Optimizer,
-        lr_scheduler: str,
-        text_encoder: CLIPTextModel | str,
-        vae: AutoencoderKL | str,
-        controlnet: ControlNetModel | str=None,
+        pretrained_model_name_or_path="checkpoints/stablev15",
+        optimizer: torch.optim.Optimizer = None,
+        fuse_type="avg",
+        lr_scheduler: str = None,
         lr_num_cycles=1,
         lr_power=1.0,
-        froze_components = ["vae","text_encoder"],
         compile: bool = False,
     ) -> None:
         super().__init__()
 
         # this line allows to access init params with 'self.hparams' attribute
         # also ensures init params will be stored in ckpt
-        self.save_hyperparameters(
-            logger=False,
-            ignore=["unet", "diffusion_schedule", "text_encoder", "vae", "controlnet"],
+        self.save_hyperparameters(logger=False)
+
+        self.unet = UNet2DConditionModel.from_pretrained(
+            pretrained_model_name_or_path, subfolder="unet"
         )
-        self.unet = unet
-        self.vae = vae
-        self.text_encoder = text_encoder
-        self.controlnet = controlnet
-        self.diffusion_schedule = diffusion_schedule
 
-        if isinstance(unet, str):
-            self.unet = UNet2DConditionModel.from_pretrained(unet, subfolder="unet")
+        self.vae = AutoencoderKL.from_pretrained(
+            pretrained_model_name_or_path, subfolder="vae"
+        )
 
-        if isinstance(vae, str):
-            self.vae = AutoencoderKL.from_pretrained(vae, subfolder="vae")
+        self.text_encoder = CLIPTextModel.from_pretrained(
+            pretrained_model_name_or_path, subfolder="text_encoder"
+        )
 
-        if isinstance(text_encoder, str):
-            self.text_encoder = CLIPTextModel.from_pretrained(
-                text_encoder, subfolder="text_encoder"
-            )
+        self.controlnet = ControlNetModel.from_unet(self.unet, conditioning_channels=1)
 
-        if isinstance(controlnet, str):
-            self.controlnet = ControlNetModel.from_pretrained(controlnet)
-        elif controlnet is None:
-            self.controlnet = ControlNetModel.from_unet(self.unet,conditioning_channels=1)
-
-        if isinstance(diffusion_schedule, str):
-            self.diffusion_schedule = DDPMScheduler.from_pretrained(diffusion_schedule,subfolder="scheduler")
+        self.diffusion_schedule = DDPMScheduler.from_pretrained(
+            pretrained_model_name_or_path, subfolder="scheduler"
+        )
 
         # loss function
         self.criterion = torch.nn.CrossEntropyLoss()
@@ -104,13 +80,17 @@ class ControlLitModule(LightningModule):
         # for tracking best so far validation accuracy
         self.val_acc_best = MaxMetric()
         self.froze()
+        self.controlnet.requires_grad_(True)
+
+        self.vae_scale_factor = 2 ** (len(self.vae.config.block_out_channels) - 1)
+        self.image_processor = VaeImageProcessor(
+            vae_scale_factor=self.vae_scale_factor, do_convert_rgb=True
+        )
 
     def froze(self):
-        for component in self.hparams.froze_components:
-            component = getattr(self, component)
-            component.eval()
-            for param in component.parameters():
-                param.requires_grad = False
+        self.unet.requires_grad_(False)
+        self.vae.requires_grad_(False)
+        self.text_encoder.requires_grad_(False)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Perform a forward pass through the model `self.net`.
@@ -119,7 +99,7 @@ class ControlLitModule(LightningModule):
         :return: A tensor of logits.
         """
 
-        return self.net(x)
+        return x
 
     def on_train_start(self) -> None:
         """Lightning hook that is called when training begins."""
@@ -127,6 +107,64 @@ class ControlLitModule(LightningModule):
         # so it's worth to make sure validation metrics don't store results from these checks
         self.val_loss.reset()
         self.froze()
+
+    def reshape_tensor(self, x: torch.Tensor):
+        shape = x.shape
+        bs = shape[0] * shape[1]
+        if len(shape) == 2:
+            return x.reshape(bs)
+        x = x.reshape(bs, *shape[2:])
+        return x
+
+    def get_res_sample(self, latents: torch.Tensor, timesteps: torch.Tensor, batch):
+        bs = latents.shape[0]
+        with torch.no_grad():
+            cls_text = self.reshape_tensor(batch["cls_text"])  # [bs*19,77]
+            controlnet_encoder_hidden_states = self.text_encoder(cls_text)[0] # [bs*19,77,768]
+
+        expanded_latents = latents.unsqueeze(1).repeat(
+            1, 19, 1, 1, 1
+        )  # [2, 19, 4, 64, 64]
+        expanded_timesteps = timesteps.unsqueeze(1).repeat(1, 19)  # [2, 19]
+        controlnet_image = batch["cls_mask"]
+
+        expanded_latents = self.reshape_tensor(expanded_latents)
+        expanded_timesteps = self.reshape_tensor(expanded_timesteps)
+        # controlnet_encoder_hidden_states = self.reshape_tensor(
+        #     controlnet_encoder_hidden_states
+        # )
+        controlnet_image = self.reshape_tensor(controlnet_image)
+        controlnet_image = controlnet_image.unsqueeze(1).float()
+        down_block_res_samples, mid_block_res_sample = self.controlnet(
+            expanded_latents,  # [bs*19,4,64,64]
+            expanded_timesteps,  # [bs*19]
+            encoder_hidden_states=controlnet_encoder_hidden_states,  # [bs*19, 77, 768]
+            controlnet_cond=controlnet_image,  # [bs*19, 1, 512, 512]
+            return_dict=False,
+        )
+        reshape_down_block_res_samples = []
+        for res_sample in down_block_res_samples:
+            shape = res_sample.shape[1:]
+            res_sample = res_sample.reshape(bs, -1, *shape)
+            if self.hparams.fuse_type == "avg":
+                res_sample = torch.mean(res_sample,dim=1)
+            elif self.hparams.fuse_type == "sum":
+                res_sample = torch.sum(res_sample,dim=1)
+            else:
+                raise ValueError(f"Unsupported fuse_type '{self.hparams.fuse_type}', expected 'avg' or 'sum'.")
+            reshape_down_block_res_samples.append(res_sample)
+
+        mid_block_res_sample = mid_block_res_sample.reshape(
+            bs, -1, *mid_block_res_sample.shape[1:]
+        )
+        if self.hparams.fuse_type == "avg":
+            mid_block_res_sample = torch.mean(mid_block_res_sample,dim=1)
+        elif self.hparams.fuse_type == "sum":
+            mid_block_res_sample = torch.sum(mid_block_res_sample,dim=1)
+        else:
+            raise ValueError(f"Unsupported fuse_type '{self.hparams.fuse_type}', expected 'avg' or 'sum'.")
+
+        return reshape_down_block_res_samples, mid_block_res_sample
 
     def model_step(self, batch):
         # Convert images to latent space
@@ -158,22 +196,15 @@ class ControlLitModule(LightningModule):
                 0
             ]  # encoder_hidden_states shape : bs 8 768
 
-        controlnet_image = batch["instance_masks"]
-
-
         # print("noised_latents:",noised_latents.shape,noised_latents.dtype)
         # print("timesteps:",timesteps.shape,timesteps.dtype)
         # print("encoder_hidden_states:",encoder_hidden_states.shape,encoder_hidden_states.dtype)
         # print("controlnet_image:",controlnet_image.shape,controlnet_image.dtype)
-        # 
-        down_block_res_samples, mid_block_res_sample = self.controlnet(
-            noised_latents,
-            timesteps,
-            encoder_hidden_states=encoder_hidden_states,
-            controlnet_cond=controlnet_image,
-            return_dict=False,
+        #
+
+        down_block_res_samples, mid_block_res_sample = self.get_res_sample(
+            latents=noised_latents, timesteps=timesteps, batch=batch
         )
-        
 
         # Predict the noise residual
         noise_pred = self.unet.forward(
@@ -274,7 +305,7 @@ class ControlLitModule(LightningModule):
 
         :return: A dict containing the configured optimizers and learning-rate schedulers to be used for training.
         """
-        trainable_params = [p for p in self.trainer.model.parameters() if p.requires_grad]
+        trainable_params = self.controlnet.parameters()
         optimizer = self.hparams.optimizer(params=trainable_params)
 
         lr_scheduler = get_scheduler(
@@ -290,4 +321,11 @@ class ControlLitModule(LightningModule):
 
 
 if __name__ == "__main__":
-    pass
+    model = HicoControlnetLitModule()
+    batch = {
+        "instance_images": torch.randn(2, 3, 512, 512),
+        "instance_prompt_ids": torch.randint(0, 100, (2, 77)),
+        "cls_mask": torch.randint(low=0, high=2, size=(2, 19, 512, 512)),
+        "cls_text": torch.randint(0, 100, (2, 19, 77)),
+    }
+    model.model_step(batch=batch)

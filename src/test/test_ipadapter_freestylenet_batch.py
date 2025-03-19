@@ -14,7 +14,6 @@ from transformers import CLIPTokenizer, CLIPFeatureExtractor
 from omegaconf import OmegaConf
 from diffusers import StableDiffusionPipeline
 from torch.utils.data import DataLoader, Dataset
-from lightning import seed_everything
 
 
 class EvalDataset(Dataset):
@@ -49,10 +48,9 @@ class EvalDataset(Dataset):
         prompt = self.prompts[index]
         mask_path = self.masks[index]
         filename = os.path.basename(mask_path)
-        prompt = prompt.strip()
-        # return {"prompt": "This man has gray hair, and high cheekbones. He wears necktie.", "filename": f"{index}.png"}
-
-        return {"prompt": prompt, "filename": filename}
+        mask = np.array(Image.open(mask_path))
+        mask = torch.tensor(mask).long()
+        return {"prompt": prompt, "filename": filename,"mask":mask}
 
 
 def get_args():
@@ -65,15 +63,15 @@ def get_args():
     parser.add_argument(
         "--ckpt_path",
         type=str,
-        default="logs/train/runs/stable_diffusion_attn_only_text/2025-03-13_23-38-35/checkpoints/last.ckpt",
+        default="logs/train/runs/ipadapter_freestylenet/2025-03-13_23-44-44/checkpoints/last.ckpt",
     )
     parser.add_argument(
-        "--model_config", type=str, default="configs/model/stable_diffusion_attn_only_text.yaml"
+        "--model_config", type=str, default="configs/model/ipadapter_freestylenet.yaml"
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="data/ipadapter_only_text",
+        default="data/ipadapter_freestylenet",
     )
     parser.add_argument(
         "--mask_range",
@@ -96,13 +94,11 @@ def get_args():
 
 
 def get_pipeline(args):
-    ckpt = None
-    if args.ckpt_path is not None:
-        ckpt = torch.load(args.ckpt_path, map_location=args.device)
+
+    ckpt = torch.load(args.ckpt_path, map_location="cpu")
     model_config = OmegaConf.load(args.model_config)  # 加载model config file
     model = hydra.utils.instantiate(model_config)
-    if ckpt is not None:
-        model.load_state_dict(ckpt["state_dict"])
+    model.load_state_dict(ckpt["state_dict"])
     tokenizer = CLIPTokenizer.from_pretrained(
         args.tokenizer_id,
         subfolder="tokenizer",
@@ -124,7 +120,9 @@ def get_pipeline(args):
 def collect_fn(batchs):
     prompt = [batch["prompt"] for batch in batchs]
     filename = [batch["filename"] for batch in batchs]
-    return {"prompt": prompt, "filename": filename}
+    masks = [batch["mask"] for batch in batchs]
+    mask = torch.stack(masks)
+    return {"prompt": prompt, "filename": filename,"mask":mask}
 
 def get_dataloader(root, mask_range, height, width, batch_size):
     dataset = EvalDataset(root=root, mask_range=mask_range, height=height, width=width)
@@ -149,11 +147,10 @@ def main():
         width=args.width,
         batch_size=args.batch_size,
     )
-    # seed_everything(args.seed)
     for batch in dataloader:
         prompts = batch['prompt']
         filenames = batch['filename']
-
+        mask = batch["mask"].to(args.device)
 
         images = pipeline.__call__(
             prompt=prompts,
@@ -161,6 +158,8 @@ def main():
             width=args.width,
             num_inference_steps=args.num_inference_steps,
             generator=generator,
+            cross_attention_kwargs=dict(mask_label=mask),
+            guidance_scale=0
         ).images
         for image,filename in zip(images,filenames):
             save_path = os.path.join(args.output_dir,filename).replace(".png",".jpg")

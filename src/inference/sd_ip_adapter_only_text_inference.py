@@ -19,12 +19,12 @@ def get_args():
     parser.add_argument("--prompt", type=str, default="She is wearing lipstick. She is attractive and has straight hair.")
     parser.add_argument("--ckpt_path", type=str, default=None)
     parser.add_argument(
-        "--model_config", type=str, default="configs/model/stable_diffusion_attn.yaml"
+        "--model_config", type=str, default="configs/model/stable_diffusion_attn_only_text.yaml"
     )
     parser.add_argument(
         "--output_dir",
         type=str,
-        default="outputs/stable_diffusion_attn",
+        default="outputs/stable_diffusion_attn_only_text",
     )
     parser.add_argument("--image_name",type=str,default="27000.png")
     parser.add_argument(
@@ -147,7 +147,7 @@ def main():
         ).images[0]
     prefix = "ip_adapter" if args.ckpt_path else "sd"
     image_name = prefix + "_" + args.image_name
-    output_path = os.path.join(args.output_dir,image_name)
+    output_path = os.path.join(args.output_dir,image_name).replace(".png",".jpg")
     image.save(output_path)
     print(f"done.image saved to {output_path}")
 

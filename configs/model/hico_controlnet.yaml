@@ -1,0 +1,19 @@
+_target_: src.models.hico_controlnet.HicoControlnetLitModule
+
+pretrained_model_name_or_path: checkpoints/stablev15
+
+fuse_type: avg
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: 1e-5
+lr_scheduler: constant
+compile: false
+
+# pretrained_model_name_or_path="checkpoints/stablev15",
+# optimizer: torch.optim.Optimizer = None,
+# lr_scheduler: str = None,
+# lr_num_cycles=1,
+# lr_power=1.0,
+# compile: bool = False,

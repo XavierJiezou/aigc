@@ -13,10 +13,63 @@ import torch.nn.functional as F
 from transformers import CLIPTextModel, CLIPVisionModelWithProjection
 import numpy as np
 from torch import nn as nn
+from peft import LoraConfig
 
 
+class SegEncoder(nn.Module):
+    # 位置编码
+    def __init__(self, num_classes=19, embedding_dim=32, cross_attention_dim=None):
+        super().__init__()
+        self.seg_embedding = nn.Embedding(num_classes, embedding_dim)
+        self.conv_layers = nn.Sequential(
+            nn.Conv2d(embedding_dim, 64, 3, stride=2, padding=1),  # 下采样
+            nn.ReLU(),
+            nn.Conv2d(64, 128, 3, stride=2, padding=1),
+            nn.ReLU(),
+            nn.Conv2d(128, cross_attention_dim, 3, stride=2, padding=1),
+            nn.AdaptiveAvgPool2d(
+                (16, 16)
+            ),  # 输出形状: (batch_size, cross_attention_dim, 16, 16)
+        )
+        self.pos_embedding = nn.Parameter(
+            torch.empty(1, 16 * 16, cross_attention_dim).normal_(std=0.02)
+        )  # from BERT
 
-class StableDiffusionAttnLitModule(LightningModule):
+    def forward(self, x):
+        emb = self.seg_embedding(x)  # (batch_size, H, W, embedding_dim)
+        emb = emb.permute(0, 3, 1, 2)  # (batch_size, embedding_dim, H, W)
+        x = self.conv_layers(emb)
+        batch_size, c, h, w = x.shape
+        x = x.view(batch_size, c, -1).permute(0, 2, 1)  # 转换为 (batch_size, 256, 768)
+        x = x + self.pos_embedding
+        return x
+
+# class SegEncoderv2(nn.Module):
+#     # 位置编码
+#     def __init__(self, num_classes=19, embedding_dim=32, cross_attention_dim=None):
+#         super().__init__()
+#         # self.seg_embedding = nn.Embedding(num_classes, embedding_dim)
+#         self.conv_layers = nn.Sequential(
+#             nn.Conv2d(1, 64, 3, stride=2, padding=1),  # 下采样
+#             nn.ReLU(),
+#             nn.Conv2d(64, 128, 3, stride=2, padding=1),
+#             nn.ReLU(),
+#             nn.Conv2d(128, cross_attention_dim, 3, stride=2, padding=1),
+#         )
+#         self.pos_embedding = nn.Parameter(
+#             torch.empty(1, 64 * 64, cross_attention_dim).normal_(std=0.02)
+#         )  # from BERT
+
+#     def forward(self, x):
+#         emb = self.seg_embedding(x)  # (batch_size, H, W, embedding_dim)
+#         emb = emb.permute(0, 3, 1, 2)  # (batch_size, embedding_dim, H, W)
+#         x = self.conv_layers(emb)
+#         batch_size, c, h, w = x.shape
+#         x = x.view(batch_size, c, -1).permute(0, 2, 1)  # 转换为 (batch_size, 256, 768)
+#         x = x + self.pos_embedding
+#         return x
+
+class StableDiffusionSegEncoderVitPosLoraLitModule(LightningModule):
 
     def __init__(
         self,
@@ -26,6 +79,7 @@ class StableDiffusionAttnLitModule(LightningModule):
         text_encoder: CLIPTextModel | str,
         optimizer: torch.optim.Optimizer,
         compile: bool,
+        lora_config: LoraConfig = None,
     ) -> None:
         """Initialize a `MNISTLitModule`.
 
@@ -67,24 +121,21 @@ class StableDiffusionAttnLitModule(LightningModule):
             self.text_encoder = CLIPTextModel.from_pretrained(
                 text_encoder, subfolder="text_encoder"
             )
-        
-        self.unet = self.process_unet(self.unet)
+        self.seg_encoder = SegEncoder(
+            embedding_dim=32, cross_attention_dim=self.unet.config.cross_attention_dim
+        )
+        self.unet.requires_grad_(False)
         self.vae.requires_grad_(False)
         self.text_encoder.requires_grad_(False)
+        if lora_config is not None:
+            print("lora config!")
+            self.unet.add_adapter(lora_config)
 
         # for tracking best so far validation accuracy
         # for averaging loss across batches
         self.train_loss = MeanMetric()
         self.val_loss = MeanMetric()
         self.test_loss = MeanMetric()
-
-    def process_unet(self, unet: UNet2DConditionModel):
-        unet.requires_grad_(False)
-        # init adapter modules
-        for name,p in unet.named_parameters():
-            if "attn2.to_q" in name or "attn2.to_v" in name:
-                p.requires_grad_(True)
-        return unet
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """Perform a forward pass through the model `self.net`.
@@ -133,12 +184,31 @@ class StableDiffusionAttnLitModule(LightningModule):
             encoder_hidden_states = self.text_encoder(batch["instance_prompt_ids"])[
                 0
             ]  # encoder_hidden_states shape : bs 8 768
-        
+        mask_encoder_hidden_states = self.seg_encoder(
+            batch["mask"]
+        )  # mask_encoder_hidden_states shape : bs 256 768
 
-        noise_pred = self.unet.forward(
-            noised_latents, timesteps, encoder_hidden_states
+        # 随机drop mask
+        image_embeds_ = []
+        for image_embed, drop_image_embed in zip(
+            mask_encoder_hidden_states, batch["drop_image_embeds"]
+        ):
+            if drop_image_embed == 1:
+                image_embeds_.append(torch.zeros_like(image_embed))
+            else:
+                image_embeds_.append(image_embed)
+        mask_encoder_hidden_states = torch.stack(image_embeds_)
+
+        encoder_hidden_states = torch.cat(
+            [encoder_hidden_states, mask_encoder_hidden_states], dim=1
+        )  # bs 264 768
+
+        noise_text_pred = self.unet.forward(
+            noised_latents,
+            timesteps,
+            encoder_hidden_states,
         ).sample
-        loss = F.mse_loss(noise_pred, noise, reduction="mean")
+        loss = F.mse_loss(noise_text_pred, noise, reduction="mean")
 
         return loss
 
@@ -230,3 +300,35 @@ class StableDiffusionAttnLitModule(LightningModule):
         optimizer = self.hparams.optimizer(params=trainable_params)
         return {"optimizer": optimizer}
 
+
+if __name__ == "__main__":
+    lora_config = LoraConfig(
+        r=4,
+        lora_alpha=4,
+        init_lora_weights="gaussian",
+        target_modules=["to_k", "to_q", "to_v", "to_out.0"],
+    )
+    model = StableDiffusionSegEncoderVitPosLoraLitModule(
+        unet="checkpoints/stablev15",
+        diffusion_schedule="checkpoints/stablev15",
+        vae="checkpoints/stablev15",
+        text_encoder="checkpoints/stablev15",
+        optimizer=torch.optim.AdamW,
+        compile=False,
+        lora_config=lora_config
+    )
+    batch = {
+        "instance_images": torch.randn(2, 3, 512, 512),
+        "instance_prompt_ids": torch.randint(low=0, high=100, size=(2, 77)),
+        "mask": torch.randint(low=0, high=19, size=(2, 512, 512)).long(),
+        "drop_image_embeds": [1, 1],
+    }
+    # model.model_step(batch)
+    total_p = 0
+    for name, p in model.named_parameters():
+        if p.requires_grad:
+            total_p += p.numel()
+            print(name)
+    print(total_p / 1e6)
+    
+    

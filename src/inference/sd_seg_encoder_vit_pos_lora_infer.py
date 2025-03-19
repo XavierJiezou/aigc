@@ -17,11 +17,8 @@ from matplotlib import pyplot as plt
 import numpy as np
 from torchvision import transforms
 from diffusers import DPMSolverMultistepScheduler
-from src.models.components.attention_processor import (
-    AttnProcessor2_0 as AttnProcessor,
-    IPAttnProcessor2_0 as IPAttnProcessor,
-)
-from src.models.ipadapter_seg_encoder import IpadapterSegEncoderLitModule
+from src.models.sd_seg_encoder_vit_pos_lora import StableDiffusionSegEncoderVitPosLoraLitModule
+from mmengine.visualization import Visualizer
 
 
 def get_generator(seed, device):
@@ -43,11 +40,11 @@ class IPAdapterPipeline:
     def __init__(
         self,
         sd_pipeline: StableDiffusionPipeline,
-        ipadapter: IpadapterSegEncoderLitModule,
+        ipadapter: StableDiffusionSegEncoderVitPosLoraLitModule,
         device: str,
         size=512,
     ):
-        self.sd_pipeline:StableDiffusionPipeline = sd_pipeline
+        self.sd_pipeline: StableDiffusionPipeline = sd_pipeline
         self.ipadapter = ipadapter
         self.device = device
 
@@ -59,6 +56,11 @@ class IPAdapterPipeline:
                 pil_image = np.array(pil_image).astype(np.int64)
             clip_image =  torch.tensor(pil_image).unsqueeze(0).to(self.device)
             clip_image_embeds = self.ipadapter.seg_encoder(clip_image)
+            feature_map = clip_image_embeds[0].permute(1,0).reshape(768,16,16)
+            overlaid_image = np.array(Image.open("data/mmcelebahq/face/27000.jpg"))
+            image = Visualizer.draw_featmap(featmap=feature_map,overlaid_image=overlaid_image)
+            Image.fromarray(image).save("feature_map.png")
+            print(clip_image_embeds.shape)
         else:
             clip_image_embeds = clip_image_embeds.to(self.device)
         image_prompt_embeds = clip_image_embeds
@@ -67,10 +69,6 @@ class IPAdapterPipeline:
         )
         return image_prompt_embeds, uncond_image_prompt_embeds
     
-    def set_scale(self, scale):
-        for attn_processor in self.sd_pipeline.unet.attn_processors.values():
-            if isinstance(attn_processor, IPAttnProcessor):
-                attn_processor.scale = scale
 
     def generate(
         self,
@@ -78,7 +76,6 @@ class IPAdapterPipeline:
         clip_image_embeds=None,
         prompt=None,
         negative_prompt=None,
-        scale=1.0,
         num_samples=4,
         seed=None,
         guidance_scale=7.5,
@@ -86,7 +83,6 @@ class IPAdapterPipeline:
         **kwargs,
     ):
         
-        self.set_scale(scale)
         if pil_image is not None:
             num_prompts = 1 if isinstance(pil_image, Image.Image) else len(pil_image)
         else:
@@ -147,11 +143,11 @@ class IPAdapterPipeline:
 
 def get_args():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--prompt", type=str, default="The man has brown hair. He is young. He wears necktie. He has no beard.")
-    parser.add_argument("--mask", default="data/mmcelebahq/mask/27604.png")
-    parser.add_argument("--ckpt_path", type=str, default="logs/train/runs/ipipadapter_seg_encoderadapter/2025-03-11_15-53-53/checkpoints/last.ckpt")
-    parser.add_argument("--model_config", type=str, default="configs/model/ipadapter_seg_encoder.yaml")
-    parser.add_argument("--output_dir", type=str, default="outputs/ipadapter_seg_encoder/")
+    parser.add_argument("--prompt", type=str, default="She is wearing lipstick. She is attractive and has straight hair.")
+    parser.add_argument("--mask", default="data/mmcelebahq/mask/27000.png")
+    parser.add_argument("--ckpt_path", type=str, default="logs/train/runs/sd_seg_encoder_vit_pos_lora/2025-03-18_12-08-15/checkpoints/last.ckpt")
+    parser.add_argument("--model_config", type=str, default="configs/model/sd_seg_encoder_vit_pos_lora.yaml")
+    parser.add_argument("--output_dir", type=str, default="outputs/sd_seg_encoder_vit_pos_lora")
     parser.add_argument("--tokenizer_id", type=str, default="checkpoints/stablev15")
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--device", type=str, default="cuda")
@@ -159,7 +155,6 @@ def get_args():
     parser.add_argument("--height", type=int, default=512)
     parser.add_argument("--width", type=int, default=512)
     parser.add_argument("--num_inference_steps", type=int, default=50)
-    parser.add_argument("--scale",type=float,default=0.5)
     args = parser.parse_args()
     return args
 
@@ -167,7 +162,7 @@ def get_args():
 def get_pipeline(args):
     ckpt = torch.load(args.ckpt_path, map_location="cpu")
     model_config = OmegaConf.load(args.model_config)  # 加载model config file
-    model: IpadapterSegEncoderLitModule = hydra.utils.instantiate(model_config)
+    model: StableDiffusionSegEncoderVitPosLoraLitModule = hydra.utils.instantiate(model_config)
     model.load_state_dict(ckpt["state_dict"])
     model.to(args.device)
     model.eval()
@@ -204,6 +199,8 @@ def main():
     print("start inference...")
 
     mask = Image.open(args.mask)
+    print(args.prompt)
+    mask.save("1.png")
     os.makedirs(args.output_dir, exist_ok=True)
 
 
@@ -213,7 +210,6 @@ def main():
         image=mask,
         height=args.height,
         width=args.width,
-        scale=args.scale,
         num_inference_steps=args.num_inference_steps,
         seed=args.seed,
         guidance_scale=args.guidance_scale,
@@ -221,9 +217,6 @@ def main():
     )[0]
 
     base_name = os.path.basename(args.mask)
-    suffix = base_name.split(".")[1]
-    prefix = base_name.split(".")[0] + f"_{args.scale}."
-    base_name = prefix + suffix
     output_path = os.path.join(args.output_dir, base_name).replace(".png",".jpg")
     image.save(output_path)
     print(f"done.image saved to {output_path}")

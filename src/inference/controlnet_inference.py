@@ -173,7 +173,7 @@ def main():
             generator=generator,
         ).images[0]
     base_name = os.path.basename(args.mask)
-    output_path = os.path.join(args.output_dir, base_name)
+    output_path = os.path.join(args.output_dir, base_name).replace(".png",".jpg")
     image.save(output_path)
     print(f"done.image saved to {output_path}")
 

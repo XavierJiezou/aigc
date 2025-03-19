@@ -1,0 +1,19 @@
+_target_: src.models.sd_seg_encoder_vit_pos_lora.StableDiffusionSegEncoderVitPosLoraLitModule
+
+unet: checkpoints/stablev15
+diffusion_schedule: checkpoints/stablev15
+vae: checkpoints/stablev15
+text_encoder: checkpoints/stablev15
+lora_config:
+  _target_: peft.LoraConfig
+  r: 4
+  lora_alpha: 4              # r * 2
+  init_lora_weights: "gaussian"
+  target_modules: ["to_k", "to_q", "to_v", "to_out.0"]
+
+optimizer:
+  _target_: torch.optim.AdamW
+  _partial_: true
+  lr: 1e-5
+
+compile: false

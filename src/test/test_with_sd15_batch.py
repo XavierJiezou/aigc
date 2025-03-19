@@ -159,7 +159,7 @@ def main():
             generator=generator,
         ).images
         for image,filename in zip(images,filenames):
-            save_path = os.path.join(args.output_dir,filename)
+            save_path = os.path.join(args.output_dir,filename).replace(".png",".jpg")
             image.save(save_path)
         if torch.cuda.is_available():
             torch.cuda.empty_cache()

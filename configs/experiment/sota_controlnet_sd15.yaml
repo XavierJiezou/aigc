@@ -1,0 +1,33 @@
+# @package _global_
+
+# to execute this experiment run:
+# python train.py experiment=example
+
+defaults:
+  - override /data: global_local_mask_sd15
+  - override /model: sota_controlnet_sd15
+  - override /callbacks: default
+  - override /trainer: gpu
+
+# all parameters below will be merged with parameters from default configurations set above
+# this allows you to overwrite only specified parameters
+
+tags: ["celebahq", "sota_controlnet_sd15"]
+
+seed: 42
+
+logger:
+  tensorboard:
+    _target_: lightning.pytorch.loggers.tensorboard.TensorBoardLogger
+    save_dir: "${paths.output_dir}/tensorboard/"
+    name: sota_controlnet_sd15
+    log_graph: False
+    default_hp_metric: True
+    prefix: ""
+  aim:
+    experiment: "sota_controlnet_sd15"
+
+callbacks:
+  sample_callback:
+    _target_: src.callbacks.sample_callback.TrainingCallback
+    sample_interval: 100

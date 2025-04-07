@@ -1,0 +1,20 @@
+_target_: src.models.sota_controlnet_sd15.SotaControlSd15LitModule
+
+optimizer:
+  _target_: prodigyopt.Prodigy
+  _partial_: true
+  lr: 1
+  use_bias_correction: true
+  safeguard_warmup: true
+  weight_decay: 0.01
+
+
+pretrained_model_name_or_path: checkpoints/stablev15
+lora_config:
+  _target_: peft.LoraConfig
+  r: 4
+  lora_alpha: 8              # r * 2
+  init_lora_weights: "gaussian"
+  target_modules: ["to_k", "to_q", "to_v", "to_out.0"]
+# compile model for faster training with pytorch 2.0
+compile: false

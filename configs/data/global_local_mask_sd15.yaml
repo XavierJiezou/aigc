@@ -1,0 +1,7 @@
+_target_: src.data.global_local_mmcelebahq_datamodule.GlobalLocalMaskMMCelebaqHQDataModule
+root: data/mmcelebahq
+drop_text_prob: 0.1
+drop_image_prob: 0.1
+batch_size: 4
+num_workers: 4
+pin_memory: true
